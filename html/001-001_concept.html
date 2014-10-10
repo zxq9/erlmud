@@ -1,0 +1,73 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+  <meta name="author" content="Craig Everett">
+  <meta name="copyright" content="&copy;2014 Craig Everett">
+  <link rel="stylesheet" type="text/css" href="erlmud_s.css" media="screen" />
+  <link rel="stylesheet" type="text/css" href="erlmud_p.css" media="print" />
+  <title>ErlMUD Notes: Concept | zxq9.com</title>
+</head>
+<body>
+  <div id="header">
+    <div id="title">
+      <h1>ErlMUD Commentary</h1>
+    </div>
+    <div id="menu">
+      <a href="index.html" title="Table of Contents">Home</a>
+      <a href="https://github.com/zxq9/erlmud" title="Source on GitHub">Source</a>
+      <a href="http://zxq9.com" title="zxq9's Home">zxq9</a>
+    </div>
+  </div>
+  <div id="body">
+    <h1>ErlMUD Concepts</h1>
+    <p>Erlmud is a simple Multi-User Dungeon that runs over TCP.</p>
+    <p>It is written in a way that takes advantage of Erlang's ability to model elements of a system
+    as independent processes which communicate only by passing messages
+    and dependent on the few promises provided by the Erlang runtime.</p>
+    <h2>Elements</h2>
+    <p>The primary elements we want to deal with in a MUD are</p>
+    <ul>
+      <li>locations</li>
+      <li>objects</li>
+      <li>mobile entities</li>
+    </ul>
+    <p>A location is a space within which play can occur.
+    Locations connect to other locations and travel is affected
+    by having an entity leave one location as it enters another.
+    The idea that locations must connect to one another to form a map,
+    and that this map must make enough sense to players that
+    it forms the basis for a playable world will inform our decisions
+    about how to design a process that represents a location,
+    what responsibilities a location might take on,
+    and what (if any) accessory processes a location may require
+    in the support of fulfilling its role.</p>
+    <p>Objects are things which are not mobile or alive.
+    Within this broad definition of objects
+    we find anything else in the world that might not be alive but is also not a location:
+    weapons, armor, consumables, light sources, money, clothing, food, containers, etc.
+    The idea that some items may have a limited lifespan,
+    and therefore have a way of being created and destroyed,
+    picked up, placed within containers, act as containers, and
+    maintain enough state to influence other elements of the game system
+    tells us that the design of object processes is not entirely simple,
+    and may not even fit within a single definition
+    (a food object may need to be different from a weapon object,
+    but adhere to a similar generic interface of "object").</p>
+    <p> A mobile entity (aka "mob") is the real point of the game.
+    Mobs are what do the verby things in MUDs.
+    They are the world creatures, the NPCs, the player avatars, the predators and the prey.
+    Without them the MUD would be a pretty boring place.
+    Knowing that all the above types of characters and creatures which occur in MUDs are mobs indicates a few things.
+    Namely, that while a general definition of mob may suffice,
+    the controlling elements that make decisions for mobs may require a bit of diversification.</p>
+    <p> The above three elements form the basis for the game itself,
+    but this tells us nothing about how they should be created, managed,
+    found within the game system, communicated with, or really anything else about the system.</p>
+    <p> In terms of an Erlang program this is actually OK.
+    With just this limited definition we can begin to explore the problem space in more depth
+    first by thinking through the basic problem of how to initialize such a system of objects,
+    and then by writing some elementary wishful-thinking code that describes the ideas in more detail.</p>
+  </div>
+</body>
+</html>
