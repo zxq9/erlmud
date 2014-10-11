@@ -6,7 +6,7 @@ Evolutionary demonstration of Erlang/OTP development. The example project is a M
 Stages
 ------
 
-The stages of change are arbitrarily designated as
+The stages of change are arbitrarily designated:
 * Concept
 * Psuedo-code / wish-code
 * Raw Erlang

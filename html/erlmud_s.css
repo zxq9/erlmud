@@ -126,6 +126,7 @@ table {
 
 #body {
   font-size: 1em;
+  line-height: 1em;
   margin: 0 auto;
   margin-bottom: 25px;
   max-width: 800px;
