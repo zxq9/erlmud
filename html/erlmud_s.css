@@ -90,18 +90,30 @@ table {
 #toc h1 {
   font-family: "liberation serif", serif;
   font-size: 2em;
-  margin-top: 15px;
+  margin-top: 1em;
 }
 #toc h2 {
   font-family: "liberation sans", sans-serif;
   font-size: 1.5em;
-  margin-top: 10px;
+  margin-top: 1em;
 }
 #toc h3 {
   font-family: "liberation sans", sans-serif;
   font-size: 1.25em;
-  margin-top: 6px;
-  margin-left: 20px;
+  margin-top: 0.5em;
+  margin-left: 2em;
+}
+#toc h4 {
+  font-family: "liberation sans", sans-serif;
+  font-size: 1em;
+  margin-top: 0.5em;
+  margin-left: 3em;
+}
+#toc h5 {
+  font-family: "liberation sans", sans-serif;
+  font-size: 1em;
+  margin-top: 0.5em;
+  margin-left: 4em;
 }
 #toc a {
   text-decoration: none;
@@ -128,12 +140,22 @@ table {
 #body h1 {
   font-family: "liberation serif", serif;
   font-size: 2.25em;
-  margin-top: 15px;
+  margin-top: 1em;
 }
 #body h2 {
   font-family: "liberation serif", serif;
   font-size: 2em;
-  margin-top: 10px;
+  margin-top: 1em;
+}
+#body h3 {
+  font-family: "liberation serif", serif;
+  font-size: 1.5em;
+  margin-top: 1em;
+}
+#body h4 {
+  font-family: "liberation serif", serif;
+  font-size: 1.25em;
+  margin-top: 1em;
 }
 #body a {
   text-decoration: none;
