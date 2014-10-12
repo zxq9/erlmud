@@ -27,6 +27,6 @@ Legal Mumbojumbo
 
 Program sources and other content copyright is held by Craig Everett (aka "zxq9", <zxq9@zxq9.com>).
 
-Program source is released under the GPL 3.0, which should be inclded in the LICENSE file in the project root directory.
+Program source is released under the GPL 3.0, which should be included in the LICENSE file in the project root directory.
 
 Other textual materials included in the *html/* subdirectory are released under the terms of the [Creative Commons Attribution Non-Commercial No Derivative License](http://creativecommons.org/licenses/by-nc-nd/3.0/), as noted in the *html/LICENSE* stub file.
