@@ -169,6 +169,8 @@ table {
 #body code {
   font-size: 0.9em;
   font-family: "liberation mono", monospace;
+  color: #340;
+  background: #edf;
 }
 #body ul {
   font-size: 0.9em;
