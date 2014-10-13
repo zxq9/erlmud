@@ -20,7 +20,7 @@ The above definitions are entirely arbitrary, but give a general idea of the sta
 
 Its common for different elements of a project to be developed as their own little mini-projects, so the "current stage" of a particular piece of code within a real project could be anywhere along its development life. This happens in ErlMUD to some degree, but generally speaking the tagged points in the source references represent general adherence to a certain stage's style (though in the early stages this does not mean that everything works well, or even at all).
 
-This codebase is accompanied by a set of commentary pages which are referenced from within the code and links back from those discussions into relevant parts of the source at certain moments in git time. The commentary is written as a set of HTML pages stored within the root project directory in *html/* and permanently hosted at http://zxq9.com/erlmud/html/.
+This codebase is accompanied by a set of commentary pages which are referenced from within the code and links back from those discussions into relevant parts of the source at certain moments in git time. The commentary is written as a set of HTML pages stored within the root project directory in *html/* and permanently hosted at http://zxq9.com/erlmud/.
 
 Legal Mumbojumbo
 ----------------
