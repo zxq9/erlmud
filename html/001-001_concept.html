@@ -4,8 +4,7 @@
   <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
   <meta name="author" content="Craig Everett">
   <meta name="copyright" content="&copy;2014 Craig Everett">
-  <link rel="stylesheet" type="text/css" href="erlmud_s.css" media="screen" />
-  <link rel="stylesheet" type="text/css" href="erlmud_p.css" media="print" />
+  <link rel="stylesheet" type="text/css" href="erlmud_s.css" />
   <title>ErlMUD Notes: Concept | zxq9.com</title>
 </head>
 <body>
@@ -21,7 +20,7 @@
   </div>
   <div id="body">
     <h1 id="concepts">ErlMUD Concepts</h1>
-    <p>Erlmud is a simple Multi-User Dungeon that runs over TCP. It is inspired by the fantastically well executed MUD system found at <a href="http://www.wotmud.org">WoTMUD</a> and joyful memories of playing dialup BBS text door games before the advent of residential internet. It is written in a way that takes advantage of Erlang's concurrent, strict message-passing model the few promises provided by the Erlang runtime.</p>
+    <p>ErlMUD is a simple Multi-User Dungeon that runs over TCP, inspired by joyful memories of playing dialup BBS door games and MUDs before the advent of residential internet. It is written in a way that takes advantage of Erlang's concurrent, strict message-passing model the few promises provided by the Erlang runtime.</p>
     <p>The system itself is written several times iteratively, gradually adding features and — most importantly for the purpose of this project — evolving in terms of code style from a primitive, ad hoc system that provides nothing more than a conceptual skeleton for the system that is ultimately desired, to a full-blown production style system that would (hopeully) not drive future maintainers mad with the urge to do violence to the original authors.</p>
     <p>This chapter begins by discussing some aspects of design that are common to any project, details the primary elements necessary to create a MUD game world, and then discusses secondary elements and other "unseen" aspects of the project which are necessary for implementation. The purpose is not to hash out every detail in prose, but rather to think about the problem in a general way and discover some of the unobvious issues that will have to be dealt with in order to implement a game system where we can deal with the primary elements at the level we want.</p>
     <h2 id="elements">Elements</h2>

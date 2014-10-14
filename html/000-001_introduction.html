@@ -1,0 +1,30 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+  <meta name="author" content="Craig Everett">
+  <meta name="copyright" content="&copy;2014 Craig Everett">
+  <link rel="stylesheet" type="text/css" href="erlmud_s.css" />
+  <title>ErlMUD Notes: Introduction | zxq9.com</title>
+</head>
+<body>
+  <div id="header">
+    <div id="title">
+      <h1>ErlMUD Commentary</h1>
+    </div>
+    <div id="menu">
+      <a href="index.html" title="Table of Contents">Home</a>
+      <a href="https://github.com/zxq9/erlmud" title="Source on GitHub">Source</a>
+      <a href="http://zxq9.com" title="zxq9's Home">zxq9</a>
+    </div>
+  </div>
+  <div id="body">
+  <h1>Introduction</h1>
+  <p>ErlMUD is a game system written in Erlang. While it is certainly possible to play a game on an ErlMUD server my real purpose in writing it and this code commentary is to demonstrate how a simple Erlang project evolves to become a production-style OTP system.</p>
+  <p>I don't cover any basics of the Erlang language here, <a href="http://learnyousomeerlang.com/">Learn You Some Erlang</a> and <a href="https://pragprog.com/book/jaerlang2/programming-erlang">Programming Erlang</a> already do a better job of that than I ever could. That doesn't mean you can't understand what is being said if you are new to the language, but if you don't know anything about Erlang yet then its probably a good idea to at least get through the parts of those books that cover the language before tackling anything beyond the first or second section of this commentary. (Hint: online resources and ebooks are great, but these are <em>big</em> books and buying a paper copy is a much easier way to get through them than trying to read online.)</p>
+  <p>The idea for this project was planted in my brain after watching countless tutorial resources that treat Erlang as a language come and go, while observing that discussions about the actual use of "Erlang" wasn't ever really about the language but about OTP and the environment provided by Erlang's VM. Many of the same issues Elixir programmers encounter when moving from toy Elixir code to production systems were the same issues Erlang programmers have, for example. Many of these issues center around idiomatic use of OTP abstractions, difficult-to-remember parts of the Erlang libraries,details of the runtime environment, and release building.</p>
+  <p>The problem is that while Erlang the language is pretty easy, Erlang the system is not. Understanding the fundamentals of concurrency and message protocols, learning large new libraries and the details of a new runtime system, using new profiling tools, understanding the quirks of release building, and utilizing the much-talked-about-but-little-used hot code upgrade capabilities are anything but easy. While language tutorials and basic resources that demonstrate toy systems are sufficient to demonstrate the language and give good hints of how to build small releases, the only way to really grasp the difference between a relatively simple, non-OTP system written in raw Erlang and a production-style OTP system is to watch a single project evolve from a simple concept demonstration to a production system.</p>
+  <p>Reading code can be hard. Understanding the interactions within a software system can be hard. I think the best way to approach learning an operation environment is to stick with the same project concept the whole way through so the reader isn't spending more time understanding how the project system works than understanding the platform system that is the point of the demonstration. To relieve the reader of the burden of understanding new project mechanics every chapter, I've instead decided to make the entire demonstration center around just ErlMUD so we can describe the way the game system works just once, and then focus on how the imlpementation of it evolves over time.</p>
+  </div>
+</body>
+</html>
