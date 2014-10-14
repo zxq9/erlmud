@@ -53,7 +53,7 @@ table {
 /* And now to try my hand at css... again... */
 
 #header {
-  height: 100px;
+  height: 5em;
 }
 #title {
   font-family: "liberation sans", sans-serif;
@@ -67,7 +67,7 @@ table {
 #menu {
   float: right;
   margin-right: 20%;
-  margin-top: 10px;
+  margin-top: 1em;
   font-family: "liberation sans", sans-serif;
   font-size: 0.9em;
   color: #777;
@@ -81,6 +81,18 @@ table {
 #menu a:hover {
   color: #aaa;
   text-decoration: underline;
+}
+#footer {
+  margin: 0 auto;
+  max-width: 800px;
+  height: 5em;
+}
+#nav {
+  float: left;
+  display: block;
+  margin: 0 auto;
+  width: 33%;
+  text-align: center;
 }
 
 #toc {
