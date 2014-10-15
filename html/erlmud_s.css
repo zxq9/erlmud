@@ -186,6 +186,7 @@ table {
   background: #edf;
 }
 #body ul {
+  margin: 1em;
   font-size: 0.9em;
   list-style-type: disc;
   list-style-position: inside;
