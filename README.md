@@ -1,7 +1,7 @@
 erlmud
 ======
 
-Evolutionary demonstration of Erlang/OTP development. The example project is a MUD system.
+Evolutionary demonstration of Erlang/OTP development.
 
 Stages
 ------
