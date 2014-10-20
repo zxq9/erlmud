@@ -154,13 +154,39 @@
     <p>Any system needs a way to get started. Some folks write this module in as much detail as they can first, and then work from there down to the details. Some folks work on the tiny components first, assembling their code from little blocks as they go. I mostly do the top-down part, but don't spend much time on detail at the highest level. Instead I usually write a <code>somapp:start/0</code> function that barely suffices to spawn a unique process, and then revise from there as I go. I've decided that this prevents me wasting time on too much detail that I don't have any hope of understanding just yet. It also allows me to be lazy at the high level and geek out at whatever level of the problem interests me first, so long as I am diligent enough to fill in the execution path between <code>start</code> and whatever I'm working on.</p>
     <p>This is one place that it can be good to start trying to iron out the verbiage of your project very early on. Write your initialization bits in a way that deals with your major system components at the level of abstraction you want the rest of the world to. Starting this early on forces pushing details to other modules, particularly in the case of whatever data models are used to start up the system. The last thing we want is for whoever configures the system and might actually deal with some top-level component to have to know that object state is represented as a tuple of form X underneath. Yuk.</p>
     <p>I'm going to leave this one wide open for now, and only implement a direct code path that spins up the application and phrase things in the initialization procedure in a way I think is natural. It will probably be wrong, or at least not look much like whatever the production version of this module will look like, but that's OK for now.</p>
-    <h3 id="unseen">That which is unseen</h3>
+    <h1 id="unseen">That which is unseen</h1>
     <p>In thinking through the three main elements of the MUD some indications that a three-module codebase was going to be insufficient. When discussing locations we mentioned that locations have quite a few more responsibilities than their imperatively implemented counterparts do, and while we're sure that locations will be required to handle some message broadcasting (notifications to everyone in the location), directory lookups (who or what is in the location), and respond to basic queries (give the room description, name, etc.), we left open the non-trivial question of how locations are to  be interconnected. When discussing objects and mobs a list of attribute descriptions was given for mobs, but not for objects. What objects can "do" (if they can do anything) and what mobs can do, and where some crossover may exist was never addressed. In particular, we never developed a concept for how a world object that is not a mob might behave. Ultimately, we have no idea about how to implement time-decaying foods, traps, or anything else of that nature. The trap case is discussed below as an example. The discussion about mobs also touched on a very important subject: the mob controllers. These issues and complications arising from them, will be discussed in more detail below.</p>
-    <h4 id="traps">Traps</h4>
-    <p>At the beginning of the <a href="./001-001_concept.html#mobs">Mobs</a> section above I listed a series of descriptive qualities that mobs might have. Throwing out so many descriptions in terms of possible actions, adjectives and influences is useful to shape our thinking about the game world. For example, above I wrote "attack" but did not write "cast a spell". We should consider whether, for example, we want to include traps within the game world, and if so what sort of mechanism makes a trap work, and whether a trap is attacking, casting a spell, or acting on its victim by some entirely different mechanism. In short, we have to determine whether a trap is a "stationary mob", a mechanic governed by its hosting location, or some independent means that will require a new module that defines a trap as its own process. It is not particularly important at this stage whether we decide to include traps or not, but that we consider how to design a system in which traps are not impossibly difficult to implement.</p>
-    <h2 id="thoughts">Thoughts on implementation</h2>
-    <p>At this point we have a firm enough idea about how the primary <em>game</em> elements could be sketched out in pseudo code (or crayon, for that matter), but the elements of the<em>system</em> have not yet been addressed at all. How does the system start? What do we call? How do we contact it? Where do locations, objects and mobs come from in the first place?</p>
-    <p>Our initial goal will be to create some very basic components that conform to the main elements of the game platform as described above: locations, objects and mobs. As mentioned, will need a way to start the system up, a way to manager for each type of element that will probably evolve into a supervisor or supervision tree, and a few other elements. But we won't really care about that stuff to begin with. Our first goal is to simply create a 3-part system that can behave as a very basic game platform. We don't care about gameplay mechanics yet, we don't care what the world looks like right now, and we don't care that the only thing we can do in the world is move around, talk, emote, chat, and pick things up and put things down. Until we create a general basis for the world's most basic mechanics thinking too much about anything else is just pipedreaming, and while exploring the system you ultimately want to build in your mind can help you come up with good ideas, too much of that without enough actual code to back it up just leads to wasted time and premature project death.</p>
+    <h1 id="summary">Summary</h1>
+    <p>Whew! That's quite a bit of stuff. Its enough that I think we need a quick summary of the bits above, just so we don't get overwhelmed by all the detail and rambling thoughts that passed above. The system is still quite small, after all.</p>
+    <p>Game elements:</p>
+    <ul>
+      <li>Locations</li>
+      <ul>
+        <li>Ways</li>
+        <li>Location Manager</li>
+      </ul>
+      <li>Objects</li>
+      <ul>
+        <li>Object Attributes</li>
+        <li>Object Messaging Protocol</li>
+        <li>Object Manager</li>
+      </ul>
+      <li>Mobs</li>
+      <ul>
+        <li>Mob Attributes</li>
+        <li>Mob Messaging Protocol</li>
+        <li>Mob Controllers</li>
+        <li>Mob Manager</li>
+      </ul>
+    </ul>
+    <p>System elements:</p>
+    <ul>
+      <li>Telnet</li>
+      <li>Chat</li>
+      <li>Player Registry</li>
+      <li><code>erlmud:start/0</code></li>
+    </ul>
+    <p>At this point we have a firm enough idea what the primary game elements are supposed to do that we can begin sketching them out in pictures or very simple (psuedo)code. In the next section we'll start implementing very simple versions of each of these pieces in an order I think is reasonable, and add code a bit at a time until we have a very basic world simulation engine in place.</p>
   </div>
   <div id="footer">
     <div id="nav"><a href="000-001_introduction.html">&lt; Previous</a></div>
