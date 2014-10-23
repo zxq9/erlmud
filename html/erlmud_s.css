@@ -52,6 +52,22 @@ table {
 
 /* And now to try my hand at css... again... */
 
+ul {
+  color: #444;
+  margin-right: 1em;
+  margin-left: 1em;
+  font-size: 0.9em;
+  list-style-type: disc;
+  list-style-position: inside;
+}
+ol {
+  color: #444;
+  margin-right: 1em;
+  margin-left: 1em;
+  font-size: 0.9em;
+  list-style-type: decimal;
+}
+
 #header {
   height: 5em;
 }
@@ -184,10 +200,4 @@ table {
   font-family: "liberation mono", monospace;
   color: #340;
   background: #edf;
-}
-#body ul {
-  margin: 1em;
-  font-size: 0.9em;
-  list-style-type: disc;
-  list-style-position: inside;
 }
