@@ -1,0 +1,80 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+  <meta name="author" content="Craig Everett">
+  <meta name="copyright" content="&copy;2014 Craig Everett">
+  <link rel="stylesheet" type="text/css" href="erlmud_s.css" />
+  <title>ErlMUD Commentary: Architecture - System Scaffolding | zxq9.com</title>
+</head>
+<body>
+  <div id="header">
+    <div id="title">
+      <h1>ErlMUD Commentary</h1>
+    </div>
+    <div id="menu">
+      <a href="index.html" title="Table of Contents">Home</a>
+      <a href="https://github.com/zxq9/erlmud" title="Source on GitHub">Source</a>
+      <a href="http://zxq9.com" title="zxq9's Home">zxq9</a>
+    </div>
+  </div>
+  <div id="body">
+    <h1 id="scaffolding">Scaffolding</h1>
+    <h2 id="telnet">Telnet interface</h2>
+    <p>MUDs traditionally work over telnet and do not require any special client-side software. We will follow this tradition in ErlMUD, at least for a while. It is common for clients to be written that understand a particular MUD or MUD family's textual structure, commands, alias system and map representation, and simply use the telnet protocol to connect on behalf of the user. Using TCP sockets is easy enough in Erlang compared to C that its tempting to break with tradition and just write a new TCP protocol and a client and server of our own on both ends. We're not going to do that, at least not yet. The reason is that telnet is easy, and easy is a good place to start when writing a new project with a design that is untried. I'm pretty sure I can get the internals of the main MUD elements to work, at least in a hackish way, without too much trouble. I'm also pretty sure that if I mess with it a bit I can host write a telnet server (should be a lot easier than doing it in C in the past). This is already a significant amount of work to do, and both are things I've never tried before. I don't want to add a new network protocol, a whole new application (the client software), an installer or package(s) for that client, and a way to get the client to users to the list of things on my plate just now. We're not even into the code yet. If any feature isn't absolutely essential we should consider if its something we might want to write it down, and then forget about it (hopefully forever).</p>
+    <p>Telnet is a pretty simply protocol, but, as indicated above, may not be the only way we will connect to the MUD. Consider that even without client software we might want to be able to connect over a secure channel instead of Telnet, since Telnet is all plain text, including passwords (oh no!). So designing the system so that the telnet connection is a component that the main service manages, and not a bunch of networking code written directly into the main system loop, is a good idea. That gives us options, and even if we never exercise the option to connect through some other method (consider how nice it would be to connect directly from an Erlang shell on another node...), it will force us to do the right thing early on and separate the detail of how we connect to the network from the fact that we connect to the network.</p>
+    <h4 id="chat">Chat system</h4>
+    <p>Chat is one of those things that isn't arbitrated by locations, globally accessible, and not an option. There are a few things we have to think about when implementing a chat system. For one thing, each location is sort of its own little chat server, since all verbal and emote activity is visible to other occupants. We might want to implement something like a "shout" feature, where any really loud action (like an actual shout) can be heard to all occupants of locations within a zone, or maybe heard X-locations away. We might also want to mimic a fun feature of WoTMUD, where players of two different species can only understand their own kind but still share basically the same channels.</p>
+    <p>Channels? Hrmmm. That's a lot like locations again. So the real question is, how do we prevent ourselves from duplicating a ton of code? Another issue is whether a mob joins a channel, a controller joins a channel or a player's connection handler farther up the stack joins the channel (and is the player's connection the same as the controller?). Previously we had established that mobs require controllers and that separating controlling logic/interfaces and the mobs themselves is probably a good idea. Now we come to the question of "what part of a mob has ears and eyes?". I think it makes the most sense to give the mobs themselves the sensory organs, route chat messages along to the controller the same way other observations are, and let the controllers handle or disregard messages as needed. Then I can avoid writing any special case code into "chat listeners".</p>
+    <p>What about private messages, like "whisper" or "tell" features? Its easy enough to implement a "tell" that makes one mob send a chat message directly to another mob, bypassing anything else. We can even say that each mob maintains its own "ignore" list and avoid having to write a central nanny message arbitration function. But this issue with ignores, private messages, channels, listening for shouts, emotes, verbals, etc. is already demonstrating that chat is actually not such a simple part of the game, simply because targetting, routing, listening and filtering are all issues we start having to suddenly deal with.</p>
+    <p>Actually, I don't want to put this into the mob's core logic. I really want to just have a single message tag, like <code>{chat, From, Message}</code> and have <code>Message</code> contain the message itself and a meta message that we can perform filter, routing, etc. logic on. And I don't want to write that logic into the actual mob processes themselves, because I'm pretty sure the metabolism and combat system is going to fill quite enough lines of code as it is. So we should write a second, assistance module for mobs that behaves like their sensory organ. Chats can either target that directly, or target the mob and the mob pass its message into it asynchronously (this is the kind of process I would link, so its logically a part of the mob, and if either crashes the whole mob crashes), and the sensory process can take over from there.</p>
+    <p>We need to write a system of channels which can be created, joined, left, and moderated. This will probably look a bit like the way locations are implemented, but without all the extra logic of physical arbitration, travel, or anything else hard. We don't need a map, either, but we may want to define some boundary conditions for chat channels, like default instantiation of factional or race-based chat rooms or something of that sort. To begin with, though, we should probably aim low and write a single global chat channel, then once we understand that, add another, and then add an in-game way to identify who should automatically belong to faction-type channels, and make a way for players to create channels in-game as well.</p>
+    <p>So that's the plan for now: first get a simple, global broadcast type chat working, and diversify from there based on whatever features we decide to implement later on. At first, anyway, with zero or very few players we won't really need to do much with channels, so we can keep in mind that we want to implement channels later on, but skip doing anything with that idea for now.</p>
+    <h4 id="player">Player registry</h4>
+    <p>People have to have some way of identifying themselves to the game server so that it can locate their character. Or not. We might want to design a game world where every time you log in you randomly inhabit a pre-existing mob and engage in whatever is going on nearby on your own. This is actually a pretty interesting idea, so I'll write it down, but for now I'm going to do the old-fashioned (and not very secure) username/password way of doing things.</p>
+    <p>But do players have accounts and characters, or is every character an account? Mobs will certainly have some concept of points or level status or something, but is this different than an account system or is the character system itself all there is to the account system? I like the free feeling old MUDs give by making characters painless to create and totally independent of one another with no account system above this. On the other hand, players today are pretty used to the World of Warcraft account model where one account owns several characters. The problem there, of course, is that if your account gets compromised all your characters are compromised at once. Its a player-side version of putting all one's eggs in one basket, which is good to avoid. Perhaps a good middleground is possible, where we create an account system, where each account owns only one character, but make it possible to add additional characters later on, but just not implement the command functionality for that yet.That means we need player accounts, and they need to track what mobs they own.</p>
+    <p>So that's two things to implement: a storage system for persistent character data (whatever the system remembers of you when you "rent" or logout), and an account storage system for tracking account/character relationships.</p>
+    <h4 id="erlmud_start">erlmud:start/0</h4>
+    <p>Any system needs a way to get started. Some folks write this module in as much detail as they can first, and then work from there down to the details. Some folks work on the tiny components first, assembling their code from little blocks as they go. I mostly do the top-down part, but don't spend much time on detail at the highest level. Instead I usually write a <code>somapp:start/0</code> function that barely suffices to spawn a unique process, and then revise from there as I go. I've decided that this prevents me wasting time on too much detail that I don't have any hope of understanding just yet. It also allows me to be lazy at the high level and geek out at whatever level of the problem interests me first, so long as I am diligent enough to fill in the execution path between <code>start</code> and whatever I'm working on.</p>
+    <p>This is one place that it can be good to start trying to iron out the verbiage of your project very early on. Write your initialization bits in a way that deals with your major system components at the level of abstraction you want the rest of the world to. Starting this early on forces pushing details to other modules, particularly in the case of whatever data models are used to start up the system. The last thing we want is for whoever configures the system and might actually deal with some top-level component to have to know that object state is represented as a tuple of form X underneath. Yuk.</p>
+    <p>I'm going to leave this one wide open for now, and only implement a direct code path that spins up the application and phrase things in the initialization procedure in a way I think is natural. It will probably be wrong, or at least not look much like whatever the production version of this module will look like, but that's OK for now.</p>
+    <h1 id="summary">Summary</h1>
+    <p>Whew! That's quite a bit of stuff. Its enough that I think we need a quick summary of the bits above, just so we don't get overwhelmed by all the detail and rambling thoughts that passed above. The system is still quite small, after all.</p>
+    <p>Game elements:</p>
+    <ul>
+      <li>Locations</li>
+      <ul>
+        <li>Ways</li>
+        <li>Location Manager</li>
+      </ul>
+      <li>Objects</li>
+      <ul>
+        <li>Object Attributes</li>
+        <li>Object Messaging Protocol</li>
+        <li>Object Manager</li>
+      </ul>
+      <li>Mobs</li>
+      <ul>
+        <li>Mob Attributes</li>
+        <li>Mob Messaging Protocol</li>
+        <li>Mob Controllers</li>
+        <li>Mob Manager</li>
+      </ul>
+    </ul>
+    <p>System elements:</p>
+    <ul>
+      <li>Telnet</li>
+      <li>Chat</li>
+      <li>Player Registry</li>
+      <li><code>erlmud:start/0</code></li>
+    </ul>
+    <p>At this point we have a firm enough idea what the primary game elements are supposed to do that we can begin sketching them out in pictures or very simple (psuedo)code. In the next section we'll start implementing very simple versions of each of these pieces in an order I think is reasonable, and add code a bit at a time until we have a very basic world simulation engine in place.</p>
+    <p>It might seem strange to leave the question of whether potentially tens of thousands of object processes sitting around in memory, maybe noisily messaging each other all the time will be a problem later on or not. In an OOP type system this might be rather hard to fix later on if not designed out of the system right now. Gobs of dependent calls sprinkled throughout the code might have to be fixed. But I've found in my experiences with Erlang that its usually best to blithely assume that the "everything is a process" concept will work out fine (unless there is some really obvious reason it won't), and that fixing performance issues only makes sense to worry with once some hard performance data from the actual development system we're working on is available. It is relatively easy to switch message routes around and replace the representation of components within even a relatively complex system. A big part of this has to do with the way we will encapsulate the data we are working with, and Erlang's refusal to let us share anything between processes helps prevent us from coding ourselves into a troublesome corner in this regard.</p>
+  </div>
+  <div id="footer">
+    <div id="nav"><a href="001-002_architecture.html">&lt; Previous</a></div>
+    <div id="nav"><a href="index.html">Home</a></div>
+    <div id="nav"><a href="001-003_architecture.html">Next &gt;</a></div>
+  </div>
+</body>
+</html>
