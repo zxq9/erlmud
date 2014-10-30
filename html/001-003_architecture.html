@@ -66,6 +66,12 @@
       <li>channel-controller protocol</li>
       <li>chat commands</li>
     </ul>
+    <h3 id="channels">Channels</h3>
+    <p>Turn me on.</p>
+    <h3 id="chan_con">Channel-Controller Protocol</h3>
+    <p>They talk.</p>
+    <h3 id="chat_commands">Chat Commands</h3>
+    <p>Lots of slashes and hashes and things. The terror of ASCII.</p>
     <h2 id="accounts">Accounts</h2>
     <p>People have to have some way of identifying themselves to the game server so that it can locate their character. Or not. We might want to design a game world where every time you log in you randomly inhabit a pre-existing mob and engage in whatever is going on nearby on your own. This is actually a pretty interesting idea, so I'll write it down, but for now I'm going to use the old-fashioned (and not very secure, but easy to implement) username/password way of doing things.</p>
     <p>But do players have accounts and characters, or is every character an account? We've found ourselves back at the issue of identity again, but from the direction of account management instead of chat and gameplay targetting. Obviously we have to do something about this. So what is an account? Its obviously different from a mob's identity, but is it different from a controller's identity? In most systems accounts are really just rows in a user table or file somewhere (consider /etc/passwd), and a token representing authority is granted to a connection and that connection really represents the user from the perspective of the system. Our sstem could work a similar way, but instead of the connection representing the user, the controller that connection spawns could. Accounts themselves, though, would still be entries in a user table or file somewhere.</p>
