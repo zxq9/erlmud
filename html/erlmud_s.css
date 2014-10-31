@@ -202,3 +202,13 @@ ol {
   color: #340;
   background: #edf;
 }
+.footnote {
+  font-size: 0.8em;
+  border-radius: 1em;
+  border: #669 1px solid;
+  color: #444;
+  text-align: justify;
+  background: #ccf;
+  margin: 1em;
+  padding: 1em;
+}
