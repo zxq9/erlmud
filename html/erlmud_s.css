@@ -202,7 +202,44 @@ ol {
   color: #340;
   background: #edf;
 }
-.footnote {
+#body .source {
+  margin-top: 1em;
+  padding: 1em;
+  border-radius: 1em;
+  font-size: 0.9em;
+  font-family: "liberation mono", monospace;
+  color: #000;
+  background: #eef;
+}
+#body .source a {
+  color: #800;
+}
+#body .source a:hover {
+  color: #808;
+  text-decoration: underline;
+}
+#body .source pre {
+  border-top: #340 1px solid;
+  margin-top: 1em;
+  padding-top: 1em;
+  font-size: 0.9em;
+  font-family: "liberation mono", monospace;
+  overflow: auto;
+}
+#body .terminal {
+  margin-top: 1em;
+  padding: 1em;
+  border-radius: 1em;
+  font-size: 0.9em;
+  font-family: "liberation mono", monospace;
+  color: #eee;
+  background: #111;
+}
+#body .terminal pre {
+  font-family: "liberation mono", monospace;
+  overflow: auto;
+}
+#body .footnote {
   font-size: 0.8em;
   border-radius: 1em;
   border: #669 1px solid;
