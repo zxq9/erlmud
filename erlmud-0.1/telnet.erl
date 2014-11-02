@@ -14,25 +14,25 @@ init(Port) ->
     loop(Socket).
 
 loop(Socket) ->
-    receive
-        {tcp, Socket, Bin} ->
-            io:format("~p telnet: Received ~tp~n", [self(), Bin]),
-            Str = binary_to_list(Bin),
-            io:format("~p telnet: Unpacked ~tp~n", [self(), Str]),
-            Reply = "You: " ++ Str,
-            gen_tcp:send(Socket, Reply),
-            loop(Socket);
-        {send, Message} ->
-            M = "#system: " ++ Message ++ "\r\n",
-            gen_tcp:send(Socket, M),
-            loop(Socket);
-        {tcp_closed, Socket} ->
-            io:format("~p telnet: Socket closed. Retiring.~n", [self()]),
-            exit(tcp_closed);
-        shutdown ->
-            io:format("~p telnet: Shutting down hard.~n", [self()]),
-            exit(shutdown);
-        Any ->
-            io:format("~p telnet: Received ~tp~n", [self(), Any]),
-            loop(Socket)
-    end.
+  receive
+    {tcp, Socket, Bin} ->
+        io:format("~p telnet: Received ~tp~n", [self(), Bin]),
+        Str = binary_to_list(Bin),
+        io:format("~p telnet: Unpacked ~tp~n", [self(), Str]),
+        Reply = "You: " ++ Str,
+        gen_tcp:send(Socket, Reply),
+        loop(Socket);
+    {send, Message} ->
+        M = "#system: " ++ Message ++ "\r\n",
+        gen_tcp:send(Socket, M),
+        loop(Socket);
+    {tcp_closed, Socket} ->
+        io:format("~p telnet: Socket closed. Retiring.~n", [self()]),
+        exit(tcp_closed);
+    shutdown ->
+        io:format("~p telnet: Shutting down hard.~n", [self()]),
+        exit(shutdown);
+    Any ->
+        io:format("~p telnet: Received ~tp~n", [self(), Any]),
+        loop(Socket)
+  end.

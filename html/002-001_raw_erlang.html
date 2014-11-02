@@ -91,28 +91,28 @@ shutdown
 14      loop(Socket).
 15
 16  loop(Socket) -&gt;
-17      receive
-18          {tcp, Socket, Bin} -&gt;
-19              io:format("~p telnet: Received ~tp~n", [self(), Bin]),
-20              Str = binary_to_list(Bin),
-21              io:format("~p telnet: Unpacked ~tp~n", [self(), Str]),
-22              Reply = "You: " ++ Str,
-23              gen_tcp:send(Socket, Reply),
-24              loop(Socket);
-25          {send, Message} -&gt;
-26              M = "#system: " ++ Message ++ "\r\n",
-27              gen_tcp:send(Socket, M),
-28              loop(Socket);
-29          {tcp_closed, Socket} -&gt;
-30              io:format("~p telnet: Socket closed. Retiring.~n", [self()]),
-31              exit(tcp_closed);
-32          shutdown -&gt;
-33              io:format("~p telnet: Shutting down hard.~n", [self()]),
-34              exit(shutdown);
-35          Any -&gt;
-36              io:format("~p telnet: Received ~tp~n", [self(), Any]),
-37              loop(Socket)
-38      end.
+17    receive
+18      {tcp, Socket, Bin} -&gt;
+19          io:format("~p telnet: Received ~tp~n", [self(), Bin]),
+20          Str = binary_to_list(Bin),
+21          io:format("~p telnet: Unpacked ~tp~n", [self(), Str]),
+22          Reply = "You: " ++ Str,
+23          gen_tcp:send(Socket, Reply),
+24          loop(Socket);
+25      {send, Message} -&gt;
+26          M = "#system: " ++ Message ++ "\r\n",
+27          gen_tcp:send(Socket, M),
+28          loop(Socket);
+29      {tcp_closed, Socket} -&gt;
+30          io:format("~p telnet: Socket closed. Retiring.~n", [self()]),
+31          exit(tcp_closed);
+32      shutdown -&gt;
+33          io:format("~p telnet: Shutting down hard.~n", [self()]),
+34          exit(shutdown);
+35      Any -&gt;
+36          io:format("~p telnet: Received ~tp~n", [self(), Any]),
+37          loop(Socket)
+38    end.
 </pre>
     </div>
     <p>And... hey, it works!</p>
