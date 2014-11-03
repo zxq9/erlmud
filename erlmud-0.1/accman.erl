@@ -18,4 +18,3 @@ loop() ->
         io:format("~p accman: Received ~tp~n", [self(), Any]),
         loop()
   end.
-
