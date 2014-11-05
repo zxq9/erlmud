@@ -12,7 +12,7 @@ init() ->
     ok = locman:start(),
     ok = objman:start(),
     ok = mobman:start(),
-    ok = netman:start([{telnet, 2222}]),
+    ok = netman:start([{telnet, start, [2222]}]),
     loop().
 
 loop() ->
