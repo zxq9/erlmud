@@ -9,15 +9,12 @@ start(Port) ->
 
 init(Port) ->
     io:format("~p telnet: Starting up on port ~p.~n", [self(), Port]),
-    {ok, Socket} = gen_tcp:listen(Port, [binary, {reuseaddr, true}, {active, false}]),
-    true = register(telnet_listener, spawn_link(fun() -> listen(Socket) end)),
+    Socket = start_listening(Port),
     Connections = orddict:new(),
     accepting(Port, Socket, Connections).
 
 accepting(Port, Socket, Connections) ->
   receive
-    start_listening ->
-        accepting(Port, Socket, Connections);
     stop_listening ->
         gen_tcp:close(Socket),
         Listener = whereis(telnet_listener),
@@ -41,14 +38,8 @@ accepting(Port, Socket, Connections) ->
 refusing(Port, Connections) ->
   receive
     start_listening ->
-        {ok, Socket} = gen_tcp:listen(Port, [binary, {reuseaddr, true}, {active, false}]),
-        true = register(telnet_listener, spawn_link(fun() -> listen(Socket) end)),
+        Socket = start_listening(Port),
         accepting(Port, Socket, Connections);
-    stop_listening ->
-        refusing(Port, Connections);
-    {new_connection, Pid} ->
-        Ref = monitor(process, Pid),
-        refusing(Port, orddict:store(Ref, Pid));
     {'DOWN', Ref, process, _Pid, _Reason} ->
         refusing(Port, orddict:erase(Ref, Connections));
     shutdown ->
@@ -58,6 +49,11 @@ refusing(Port, Connections) ->
         io:format("~p telnet: received ~tp.~n", [self(), Any]),
         refusing(Port, Connections)
   end.
+
+start_listening(Port) ->
+    {ok, Socket} = gen_tcp:listen(Port, [binary, {reuseaddr, true}, {active, false}]),
+    true = register(telnet_listener, spawn_link(fun() -> listen(Socket) end)),
+    Socket.
 
 %% Listener
 listen(Socket) ->
