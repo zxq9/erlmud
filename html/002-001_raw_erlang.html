@@ -19,9 +19,11 @@
     </div>
   </div>
   <div id="body">
-    <h1>Structural concerns </h1>
-    <p>Author's note as of 2014-11-04: Baby steps, or a few leaps?</p>
+    <h1>2014-11-04: Author's Note</h1>
+    <p>For the benefit of the two other people who might accidentally see this...</p>
+    <p>Baby steps, or a few leaps?</p>
     <p>I'm torn between the idea of incrementally explaining all the code as I write it the first time and the reality that we're going to be seeing essentially the same code quite a few times as ErlMUD moves through its various phases. If I explain the initial write as I go we would see micro-evolutions and have a chance to discuss the micro nature of style and structure decisions in programs. But that is not really what this book is about. Instead I'm going to show the very barest version of a project template, explain that, then blow through a lot of the scaffolding and then fill the skeleton back in code and then explain through it as I go.</p>
+    <p>What follows is currently half-baked and not the focus of my attention and will be replaced with a per-element walkthrough of the elements of the system skeleton.</p>
     <h1 id="begin">Begin at the Beginning</h1>
     <p>Taking the Mad Hatter's advice, we will begin at the beginning. All I'm interested in is a bare-bones template that spawns a registered erlang process, executes an init function, and responds to messages in a loop. I'm probably just being emotionally shallow, but it makes me feel good to start with something that already talks back, even if the chatter is pointless.</p>
     <div class="source">
