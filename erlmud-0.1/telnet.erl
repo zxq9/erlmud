@@ -9,7 +9,7 @@ start(Port) ->
 
 init(Port) ->
     io:format("~p telnet: Starting up on port ~p.~n", [self(), Port]),
-    {ok, Socket} = gen_tcp:listen(Port, [binary, {active, false}]),
+    {ok, Socket} = gen_tcp:listen(Port, [binary, {reuseaddr, true}, {active, false}]),
     true = register(telnet_listener, spawn_link(fun() -> listen(Socket) end)),
     Connections = orddict:new(),
     accepting(Port, Socket, Connections).
@@ -41,7 +41,7 @@ accepting(Port, Socket, Connections) ->
 refusing(Port, Connections) ->
   receive
     start_listening ->
-        {ok, Socket} = gen_tcp:listen(Port, [binary, {active, false}]),
+        {ok, Socket} = gen_tcp:listen(Port, [binary, {reuseaddr, true}, {active, false}]),
         true = register(telnet_listener, spawn_link(fun() -> listen(Socket) end)),
         accepting(Port, Socket, Connections);
     stop_listening ->
