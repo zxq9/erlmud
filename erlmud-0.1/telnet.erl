@@ -4,68 +4,102 @@
 %% Telnet service
 start() -> start(23).
 
-start(Port) ->
-    register(telnet, spawn(fun() -> init(Port) end)).
+start(PortNum) ->
+    register(telnet, spawn(fun() -> init(PortNum) end)).
 
-init(Port) ->
-    io:format("~p telnet: Starting up on port ~p.~n", [self(), Port]),
-    Socket = start_listening(Port),
-    Connections = orddict:new(),
-    accepting(Port, Socket, Connections).
+init(PortNum) ->
+    io:format("~p telnet: Starting up on port ~p.~n", [self(), PortNum]),
+    process_flag(trap_exit, true),
+    {Port, Listener} = start_listening(PortNum),
+    Connections = ordsets:new(),
+    accepting(PortNum, Connections, Port, Listener).
 
-accepting(Port, Socket, Connections) ->
+accepting(PortNum, Connections, Port, Listener) ->
   receive
+    {new_connection, Socket} ->
+        io:format("~p telnet: Accepted on ~p~n", [self(), Port]),
+        Talker = spawn_link(fun() -> start_talking(Socket) end),
+        gen_tcp:controlling_process(Socket, Talker),
+        UpdateConn = ordsets:add_element(Talker, Connections),
+        accepting(PortNum, UpdateConn, Port, Listener);
+    {end_connection, Talker} ->
+        io:format("~p telnet: Talker (~p) connection ended.~n", [self(), Talker]),
+        UpdateConn = ordsets:del_element(Talker, Connections),
+        accepting(PortNum, UpdateConn, Port, Listener);
     stop_listening ->
-        gen_tcp:close(Socket),
-        Listener = whereis(telnet_listener),
-        unlink(Listener),
-        exit(Listener, stop_listening),
-        refusing(Port, Connections);
-    {new_connection, Pid} ->
-        Ref = monitor(process, Pid),
-        accepting(Port, Socket, orddict:store(Ref, Pid));
-    {'DOWN', Ref, process, _Pid, _Reason} ->
-        accepting(Port, Socket, orddict:erase(Ref, Connections));
+        exit(Listener, kill),
+        gen_tcp:close(Port),
+        refusing(PortNum, Connections);
+    status ->
+        io:format("~p telnet: accepting connections~n", [self()]),
+        io:format("  PortNum: ~p~n  Connections: ~p~n  Port: ~p~n  Listener: ~p~n",
+                  [PortNum, Connections, Port, Listener]),
+        accepting(PortNum, Connections, Port, Listener);
+    {'EXIT', Listener, Reason} ->
+        io:format("~p telnet: Listener (~p) exited with ~p~n",
+                  [self(), Listener, Reason]),
+        gen_tcp:close(Port),
+        {NewPort, NewListener} = start_listening(PortNum),
+        accepting(PortNum, Connections, NewPort, NewListener);
+    {'EXIT', Pid, Reason} ->
+        io:format("~p telnet: Talker (~p) exited with ~p~n", [self(), Pid, Reason]),
+        accepting(PortNum, Connections, Port, Listener);
     shutdown ->
-        gen_tcp:close(Socket),
-        [Pid ! shutdown || {_, Pid} <- orddict:to_list(Connections)],
-        exit(shutdown);
+        io:format("~p telnet: Shutting down...~n", [self()]),
+        exit(Listener, kill),
+        gen_tcp:close(Port),
+        close_all(Connections);
     Any ->
         io:format("~p telnet: received ~tp.~n", [self(), Any]),
-        accepting(Port, Socket, Connections)
+        accepting(PortNum, Connections, Port, Listener)
   end.
 
-refusing(Port, Connections) ->
+refusing(PortNum, Connections) ->
   receive
+    {end_connection, Talker} ->
+        io:format("~p telnet: Talker (~p) connection ended.~n", [self(), Talker]),
+        UpdateConn = ordsets:del_element(Talker, Connections),
+        refusing(PortNum, UpdateConn);
     start_listening ->
-        Socket = start_listening(Port),
-        accepting(Port, Socket, Connections);
-    {'DOWN', Ref, process, _Pid, _Reason} ->
-        refusing(Port, orddict:erase(Ref, Connections));
+        {Port, Listener} = start_listening(PortNum),
+        accepting(PortNum, Connections, Port, Listener);
+    status ->
+        io:format("~p telnet: refusing connections~n", [self()]),
+        io:format("  PortNum: ~p~n  Connections: ~p~n", [PortNum, Connections]),
+        refusing(PortNum, Connections);
+    {'EXIT', Pid, Reason} ->
+        io:format("~p telnet: Talker (~p) exited with ~p~n", [self(), Pid, Reason]),
+        refusing(PortNum, Connections);
     shutdown ->
-        [Pid ! shutdown || {_, Pid} <- orddict:to_list(Connections)],
-        exit(shutdown);
+        io:format("~p telnet: Shutting down...~n", [self()]),
+        close_all(Connections);
     Any ->
         io:format("~p telnet: received ~tp.~n", [self(), Any]),
-        refusing(Port, Connections)
+        refusing(PortNum, Connections)
   end.
 
-start_listening(Port) ->
-    {ok, Socket} = gen_tcp:listen(Port, [binary, {reuseaddr, true}, {active, false}]),
-    true = register(telnet_listener, spawn_link(fun() -> listen(Socket) end)),
-    Socket.
+close_all(Connections) ->
+    [Talker ! shutdown || Talker <- ordsets:to_list(Connections)].
 
 %% Listener
-listen(Socket) ->
-    io:format("~p telnet_listener: Listening on ~p~n", [self(), Socket]),
-    {ok, Conn} = gen_tcp:accept(Socket),
-    io:format("~p telnet_listener: Accepted on ~p~n", [self(), Conn]),
-    Talker = spawn(fun() -> talk(Conn) end),
-    gen_tcp:controlling_process(Conn, Talker),
-    listen(Socket).
+start_listening(PortNum) ->
+    {ok, Port} = gen_tcp:listen(PortNum, [binary, {reuseaddr, true}, {active, false}]),
+    Listener = spawn_link(fun() -> listen(Port) end),
+    {Port, Listener}.
+
+listen(Port) ->
+    io:format("~p telnet_listener: Listening on ~p~n", [self(), Port]),
+    {ok, Socket} = gen_tcp:accept(Port),
+    gen_tcp:controlling_process(Socket, whereis(telnet)),
+    telnet ! {new_connection, Socket},
+    listen(Port).
 
 %% Connection handlers
-talk(Socket) ->
+start_talking(Socket) ->
+    Telcon = telcon:start_link(self),
+    talk(Socket, Telcon).
+
+talk(Socket, Telcon) ->
     inet:setopts(Socket, [{active, once}]),
   receive
     {tcp, Socket, Bin} ->
@@ -74,18 +108,17 @@ talk(Socket) ->
         io:format("~p telnet: Unpacked ~tp~n", [self(), Str]),
         Reply = "You: " ++ Str,
         gen_tcp:send(Socket, Reply),
-        talk(Socket);
+        talk(Socket, Telcon);
     {send, Message} ->
         M = "#system: " ++ Message ++ "\r\n",
         gen_tcp:send(Socket, M),
-        talk(Socket);
+        talk(Socket, Telcon);
     {tcp_closed, Socket} ->
         io:format("~p telnet: Socket closed. Retiring.~n", [self()]),
-        exit(tcp_closed);
+        telnet ! {end_connection, self()};
     shutdown ->
-        io:format("~p telnet: Shutting down hard.~n", [self()]),
-        exit(shutdown);
+        io:format("~p telnet: Shutting down hard.~n", [self()]);
     Any ->
         io:format("~p telnet: Received ~tp~n", [self(), Any]),
-        talk(Socket)
+        talk(Socket, Telcon)
   end.
