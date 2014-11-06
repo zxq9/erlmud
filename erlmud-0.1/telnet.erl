@@ -9,54 +9,66 @@ start(Port) ->
 
 init(Port) ->
     io:format("~p telnet: Starting up on port ~p.~n", [self(), Port]),
-    start_listening(Port),
+    {ok, Socket} = gen_tcp:listen(Port, [binary, {active, false}]),
+    true = register(telnet_listener, spawn_link(fun() -> listen(Socket) end)),
     Connections = orddict:new(),
-    loop(Port, Connections).
+    accepting(Port, Socket, Connections).
 
-loop(Port, Connections) ->
+accepting(Port, Socket, Connections) ->
   receive
     start_listening ->
-        start_listening(Port),
-        loop(Port, Connections);
+        accepting(Port, Socket, Connections);
     stop_listening ->
-        stop_listening(),
-        loop(Port, Connections);
+        gen_tcp:close(Socket),
+        Listener = whereis(telnet_listener),
+        unlink(Listener),
+        exit(Listener, stop_listening),
+        refusing(Port, Connections);
     {new_connection, Pid} ->
         Ref = monitor(process, Pid),
-        loop(Port, orddict:store(Ref, Pid));
+        accepting(Port, Socket, orddict:store(Ref, Pid));
     {'DOWN', Ref, process, _Pid, _Reason} ->
-        loop(Port, orddict:erase(Ref, Connections));
+        accepting(Port, Socket, orddict:erase(Ref, Connections));
     shutdown ->
-        stop_listening(),
+        gen_tcp:close(Socket),
         [Pid ! shutdown || {_, Pid} <- orddict:to_list(Connections)],
-        exit(shutdown)
+        exit(shutdown);
+    Any ->
+        io:format("~p telnet: received ~tp.~n", [self(), Any]),
+        accepting(Port, Socket, Connections)
+  end.
+
+refusing(Port, Connections) ->
+  receive
+    start_listening ->
+        {ok, Socket} = gen_tcp:listen(Port, [binary, {active, false}]),
+        true = register(telnet_listener, spawn_link(fun() -> listen(Socket) end)),
+        accepting(Port, Socket, Connections);
+    stop_listening ->
+        refusing(Port, Connections);
+    {new_connection, Pid} ->
+        Ref = monitor(process, Pid),
+        refusing(Port, orddict:store(Ref, Pid));
+    {'DOWN', Ref, process, _Pid, _Reason} ->
+        refusing(Port, orddict:erase(Ref, Connections));
+    shutdown ->
+        [Pid ! shutdown || {_, Pid} <- orddict:to_list(Connections)],
+        exit(shutdown);
+    Any ->
+        io:format("~p telnet: received ~tp.~n", [self(), Any]),
+        refusing(Port, Connections)
   end.
 
 %% Listener
-start_listening(Port) ->
-    case whereis(telnet_listener) of
-        undefined -> register(telnet_listener, spawn(fun() -> init_listener(Port) end));
-        _Pid      -> true
-    end.
-
-stop_listening() ->
-    case whereis(telnet_listener) of
-        undefined -> ok;
-        Pid       -> Pid ! shutdown
-    end,
-    ok.
-
-init_listener(Port) ->
-    {ok, Socket} = gen_tcp:listen(Port, [binary, {active, false}]),
-    listen(Socket).
-
 listen(Socket) ->
+    io:format("~p telnet_listener: Listening on ~p~n", [self(), Socket]),
     {ok, Conn} = gen_tcp:accept(Socket),
+    io:format("~p telnet_listener: Accepted on ~p~n", [self(), Conn]),
     Talker = spawn(fun() -> talk(Conn) end),
     gen_tcp:controlling_process(Conn, Talker),
     listen(Socket).
 
-%% Talkers
+%% Connection handlers
 talk(Socket) ->
     inet:setopts(Socket, [{active, once}]),
   receive
