@@ -6,15 +6,28 @@ start(Services) ->
     ok.
 
 init(Services) ->
-    [io:format("~p netman: Notional init of ~p~n", [self(), S]) || S <- Services],
-    loop().
+    {ok, State} = init([], Services),
+    loop(State).
 
-loop() ->
+init(A, []) -> {ok, A};
+init(A, [{Module, Func, Args} | Rest])  ->
+    io:format("~p netman: Starting ~p~n", [self(), Module]),
+    true = apply(Module, Func, Args),
+    init([Module | A], Rest).
+
+loop(State) ->
   receive
     shutdown ->
+        shutdown(State),
         io:format("~p netman: Shutting down.~n", [self()]),
         exit(shutdown);
     Any ->
         io:format("~p netman: Received ~tp~n", [self(), Any]),
-        loop()
+        loop(State)
   end.
+
+shutdown(Services) ->
+    io:format("~p netman: Shutting down subordinates...~n", [self()]),
+    [S ! shutdown || S <- Services],
+    ok.
+        
