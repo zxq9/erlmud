@@ -15,7 +15,7 @@ welcome(Talker) ->
     end.
 
 register_acc(Talker, Handle) ->
-    Talker ! {send, "Enter a passphrase: "},
+    Talker ! {send, "\r\nLooks like you're new here.\r\nEnter a passphrase: "},
     P1 = receive {received, P1Bin} -> stringify(P1Bin) end,
     Talker ! {send, "Re-enter to confirm: "},
     P2 = receive {received, P2Bin} -> stringify(P2Bin) end,
@@ -80,16 +80,25 @@ greet() ->
 
 %% Accman interactions
 check_registry_for(Handle) ->
-    Ref = make_ref(),
-    accman ! {self(), Ref, {lookup, Handle}},
-    receive {Ref, Response} -> Response end.
+    call(accman, lookup, Handle).
 
 check_password(Handle, PW) ->
-    Ref = make_ref(),
-    accman ! {self(), Ref, {verify, {Handle, PW}}},
-    receive {Ref, Response} -> Response end.
+    call(accman, verify, {Handle, PW}).
 
 create_acc(Handle, PW) ->
-    Ref = make_ref(),
-    accman ! {self(), Ref, {create, {Handle, PW}}},
-    receive {Ref, Response} -> Response end.
+    call(accman, create, {Handle, PW}).
+
+%% Synchronous handler
+call(Proc, Request, Data) ->
+    Ref = monitor(process, Proc),
+    Proc ! {self(), Ref, {Request, Data}},
+    receive
+        {Ref, Res} ->
+            demonitor(Ref, [flush]),
+            Res;
+        {'DOWN', Ref, process, Proc, Reason} ->
+            {fail, Reason}
+    after 1000 ->
+        io:format("~p: ask(~p, ~p, ~p) timed out.~n", [self(), Proc, Request, Data]),
+        {fail, timeout}
+    end.
