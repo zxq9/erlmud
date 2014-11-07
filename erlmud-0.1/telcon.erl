@@ -10,8 +10,13 @@ welcome(Talker) ->
     Talker ! {send, Greeting},
     Handle = receive {received, Bin} -> stringify(Bin) end,
     case check_registry_for(Handle) of
-        unregistered -> register_acc(Talker, Handle);
-        registered   -> authenticate(Talker, Handle)
+        unregistered   -> register_acc(Talker, Handle);
+        registered     -> authenticate(Talker, Handle);
+        {fail, Reason} ->
+            io:format("~p telcon: check_registry_for/1 failed with ~p~n",
+                      [self(), Reason]),
+            Talker ! {send, "Something went wrong, let's try that again...\r\n"},
+            welcome(Talker)
     end.
 
 register_acc(Talker, Handle) ->
@@ -23,14 +28,18 @@ register_acc(Talker, Handle) ->
         true  ->
             case create_acc(Handle, P1) of
                 ok  ->
-                    M = "Welcome to ErlMUD, " ++ Handle ++ "!\r\n" ++
+                    M = "\r\nWelcome to ErlMUD, " ++ Handle ++ "!\r\n" ++
                         "Enjoy your stay, and don't feed the trolls.\r\n" ++ prompt(),
                     Talker ! {send, M},
                     loop(Talker, Handle);
                 {error, handle_is_in_use} -> 
-                    M = "Someone else nabbed your handle!\r\n"
+                    M = "\r\nSomeone else nabbed your handle!\r\n"
                         "Let's try this again...\r\n",
                     Talker ! {send, M},
+                    welcome(Talker);
+                {fail, Reason} ->
+                    io:format("~p telcon: create_acc/2 failed with ~p~n", [self(), Reason]),
+                    Talker ! {send, "Something went wrong, let's try that again...\r\n"},
                     welcome(Talker)
             end;
         false ->
@@ -48,6 +57,11 @@ authenticate(Talker, Handle) ->
             loop(Talker, Handle);
         badpass ->
             timer:sleep(7000),
+            authenticate(Talker, Handle);
+        {fail, Reason} ->
+            io:format("~p telcon: check_password/2 failed with ~p~n",
+                      [self(), Reason]),
+            Talker ! {send, "Something went wrong, let's try that again...\r\n"},
             authenticate(Talker, Handle)
     end.
 
