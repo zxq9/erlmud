@@ -103,7 +103,6 @@ talk(Socket, Telcon) ->
     inet:setopts(Socket, [{active, once}]),
   receive
     {tcp, Socket, Bin} ->
-        io:format("~p telnet: Received ~tp~n", [self(), Bin]),
         Telcon ! {received, Bin},
         talk(Socket, Telcon);
     {send, Message} ->
