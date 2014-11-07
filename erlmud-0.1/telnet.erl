@@ -104,11 +104,9 @@ talk(Socket, Telcon) ->
   receive
     {tcp, Socket, Bin} ->
         io:format("~p telnet: Received ~tp~n", [self(), Bin]),
-        Message = binary_to_list(binary:replace(Bin, <<"\r\n">>, <<>>)),
-        Telcon ! {received, Message},
+        Telcon ! {received, Bin},
         talk(Socket, Telcon);
-    {send, String} ->
-        Message = String ++ "\r\n",
+    {send, Message} ->
         gen_tcp:send(Socket, Message),
         talk(Socket, Telcon);
     {tcp_closed, Socket} ->
@@ -116,7 +114,7 @@ talk(Socket, Telcon) ->
         telnet ! {end_connection, self()};
     shutdown ->
         Telcon ! shutdown,
-        io:format("~p telnet: Shutting down.~n", [self()]);
+        io:format("~p telnet: Talker shutting down.~n", [self()]);
     Any ->
         io:format("~p telnet: Received ~tp~n", [self(), Any]),
         talk(Socket, Telcon)

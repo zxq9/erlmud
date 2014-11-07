@@ -6,9 +6,9 @@ start_link(Talker) ->
 
 loop(Talker) ->
   receive
-    {received, String} ->
-        io:format("~p telcon: Received ~tp~n", [self(), String]),
-        Reply = "Got: " ++ String,
+    {received, Bin} ->
+        Message = binary_to_list(binary:replace(Bin, <<"\r\n">>, <<>>)),
+        Reply = handle(Message) ++ "\r\n" ++ prompt(),
         Talker ! {send, Reply},
         loop(Talker);
     shutdown ->
@@ -18,3 +18,6 @@ loop(Talker) ->
         loop(Talker)
   end.
 
+handle(Message) -> "Got: " ++ Message.
+
+prompt() -> "(Some Prompt)$ ".
