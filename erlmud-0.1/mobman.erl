@@ -1,21 +1,42 @@
 -module(mobman).
--export([start/0]).
+-export([start/1, start/2, start_link/1, start_link/2]).
 
-start() ->
-    true = register(mobman, spawn(fun() -> init() end)),
-    ok.
+start(Parent) -> start(Parent, []).
 
-init() ->
+start(Parent, Conf) ->
+    Name = ?MODULE,
+    case whereis(Name) of
+        undefined ->
+            Pid = spawn(fun() -> init(Parent, Conf) end),
+            true = register(Name, Pid),
+            {ok, Pid};
+        Pid -> 
+            {ok, Pid}
+    end.
+
+start_link(Parent) -> start_link(Parent, []).
+
+start_link(Parent, Conf) ->
+    Name = ?MODULE,
+    case whereis(Name) of
+        undefined ->
+            Pid = spawn_link(fun() -> init(Parent, Conf) end),
+            true = register(Name, Pid),
+            {ok, Pid};
+        Pid ->
+            {ok, Pid}
+    end.
+
+init(Parent, Conf) ->
     io:format("~p mobman: Notional initialization.~n", [self()]),
-    loop().
+    loop(Parent, Conf).
 
-loop() ->
+loop(Parent, Conf) ->
   receive
     shutdown ->
         io:format("~p mobman: Shutting down.~n", [self()]),
         exit(shutdown);
     Any ->
         io:format("~p mobman: Received ~tp~n", [self(), Any]),
-        loop()
+        loop(Parent, Conf)
   end.
-

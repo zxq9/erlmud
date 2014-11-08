@@ -1,20 +1,42 @@
 -module(locman).
--export([start/0]).
+-export([start/1, start/2, start_link/1, start_link/2]).
 
-start() ->
-    true = register(locman, spawn(fun() -> init() end)),
-    ok.
+start(Parent) -> start(Parent, []).
 
-init() ->
+start(Parent, Conf) ->
+    Name = ?MODULE,
+    case whereis(Name) of
+        undefined ->
+            Pid = spawn(fun() -> init(Parent, Conf) end),
+            true = register(Name, Pid),
+            {ok, Pid};
+        Pid -> 
+            {ok, Pid}
+    end.
+
+start_link(Parent) -> start_link(Parent, []).
+
+start_link(Parent, Conf) ->
+    Name = ?MODULE,
+    case whereis(Name) of
+        undefined ->
+            Pid = spawn_link(fun() -> init(Parent, Conf) end),
+            true = register(Name, Pid),
+            {ok, Pid};
+        Pid ->
+            {ok, Pid}
+    end.
+
+init(Parent, Conf) ->
     io:format("~p locman: Notional initialization.~n", [self()]),
-    loop().
+    loop(Parent, Conf).
 
-loop() ->
+loop(Parent, Conf) ->
   receive
     shutdown ->
         io:format("~p locman: Shutting down.~n", [self()]),
         exit(shutdown);
     Any ->
         io:format("~p locman: Received ~tp~n", [self(), Any]),
-        loop()
+        loop(Parent, Conf)
   end.

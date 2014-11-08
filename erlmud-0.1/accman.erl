@@ -1,45 +1,73 @@
 -module(accman).
--export([start/0]).
+-export([start/1, start/2, start_link/1, start_link/2]).
 
-start() ->
-    true = register(accman, spawn(fun() -> init() end)),
-    ok.
+start(Parent) -> start(Parent, []).
 
-init() ->
-    io:format("~p accman: Notional initialization.~n", [self()]),
-    Registry = orddict:new(),
-    loop(Registry).
+start(Parent, Conf) ->
+    Name = ?MODULE,
+    case whereis(Name) of
+        undefined ->
+            Pid = spawn(fun() -> init(Parent, Conf) end),
+            true = register(Name, Pid),
+            {ok, Pid};
+        Pid -> 
+            {ok, Pid}
+    end.
 
-loop(Registry) ->
+start_link(Parent) -> start_link(Parent, []).
+
+start_link(Parent, Conf) ->
+    Name = ?MODULE,
+    case whereis(Name) of
+        undefined ->
+            Pid = spawn_link(fun() -> init(Parent, Conf) end),
+            true = register(Name, Pid),
+            {ok, Pid};
+        Pid ->
+            {ok, Pid}
+    end.
+
+init(Parent, Conf) ->
+    io:format("~p accman: Notional initialization with ~p.~n", [self(), Conf]),
+    Registry = case Conf of
+        [] -> orddict:new();
+        _  -> init_registry(Conf)
+    end,
+    loop(Parent, Registry).
+
+init_registry(_) -> orddict:new().
+
+loop(Parent, Registry) ->
   receive
     {From, Ref, {lookup, Handle}} ->
         Status = lookup(Handle, Registry),
         From ! {Ref, Status},
-        loop(Registry);
+        loop(Parent, Registry);
     {From, Ref, {verify, Acc}} ->
         Response = verify(Acc, Registry),
         From ! {Ref, Response},
-        loop(Registry);
+        loop(Parent, Registry);
     {From, Ref, {create, Acc}} ->
         case create(Acc, Registry) of
             Error = {error, _} ->
                 From ! {Ref, Error},
-                loop(Registry);
+                loop(Parent, Registry);
             Updated ->
                 From ! {Ref, ok},
-                loop(Updated)
+                loop(Parent, Updated)
         end;
     status ->
         io:format("~p accman: Registry ~p~n", [self(), Registry]),
-        loop(Registry);
+        loop(Parent, Registry);
     shutdown ->
         io:format("~p accman: Shutting down.~n", [self()]),
         exit(shutdown);
     Any ->
         io:format("~p accman: Received ~tp~n", [self(), Any]),
-        loop(Registry)
+        loop(Parent, Registry)
   end.
 
+% Magic
 lookup(Handle, Registry) ->
     case orddict:is_key(Handle, Registry) of
         true  -> registered;
