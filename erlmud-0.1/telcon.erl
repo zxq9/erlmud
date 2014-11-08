@@ -84,8 +84,10 @@ loop(Talker, Handle) ->
 stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
 
 topline(Bin) ->
-    [Top|_] = stringify(Bin),
-    Top.
+    case stringify(Bin) of
+        []        -> "";
+        [Top | _] -> Top
+    end.
 
 evaluate(Message) -> evaluate([], Message).
 
@@ -97,13 +99,17 @@ parse(Line) ->
     [Command | Tokens] = string:tokens(Line, " "),
     parse(Command, Tokens, Line).
 
-parse("say", _, Line) ->
-    Phrase = string:strip(string:sub_string(Line, string:chr(Line, $\s))),
-    "You say,\"" ++ Phrase ++ "\"";
+parse("say", _, Line) -> % say(Phrase)
     % say/1 should always pass through the location
-    % say(Phrase)
-
+    Phrase = phrasalate(Line),
+    "You say,\"" ++ Phrase ++ "\"";
 parse(Other, _, _) -> "You don't know how to " ++ Other.
+
+phrasalate(Line) ->
+    case string:chr(Line, $\s) of
+        0 -> "";
+        Z -> string:strip(string:substr(Line, Z))
+    end.
 
 prompt(Handle) -> Handle ++ " $ ".
 

@@ -12,7 +12,7 @@ init() ->
     ok = locman:start(),
     ok = objman:start(),
     ok = mobman:start(),
-    ok = netman:start([{telnet, start, [2222]}]),
+    ok = netman:start([{telnet, start_link, [2222]}]),
     loop().
 
 loop() ->
@@ -28,6 +28,6 @@ loop() ->
         chanman ! shutdown,
         exit(shutdown);
     Any ->
-        io:format("~p erlmud: Received~tp~n", [self(), Any]),
+        io:format("~p erlmud: Received ~tp~n", [self(), Any]),
         loop()
   end.

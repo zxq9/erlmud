@@ -6,28 +6,36 @@ start(Services) ->
     ok.
 
 init(Services) ->
-    {ok, State} = init([], Services),
-    loop(State).
+    process_flag(trap_exit, true),
+    {ok, Running} = init([], Services),
+    loop(Running, Services).
 
 init(A, []) -> {ok, A};
 init(A, [{Module, Func, Args} | Rest])  ->
     io:format("~p netman: Starting ~p~n", [self(), Module]),
-    true = apply(Module, Func, Args),
-    init([Module | A], Rest).
+    {ok, Pid} = apply(Module, Func, Args),
+    init([{Pid, Module} | A], Rest).
 
-loop(State) ->
+loop(Running, Services) ->
   receive
+    status ->
+        io:format("~p netman: Active services: ~tp~n", [self(), Running]),
+        loop(Running, Services);
+    {'EXIT', Pid, Reason} ->
+        Service = proplists:get_value(Pid, Running),
+        io:format("~p netman: ~tp died with ~tp~n", [self(), Service, Reason]),
+        init(Services);
     shutdown ->
-        shutdown(State),
+        shutdown(Running),
         io:format("~p netman: Shutting down.~n", [self()]),
         exit(shutdown);
     Any ->
         io:format("~p netman: Received ~tp~n", [self(), Any]),
-        loop(State)
+        loop(Running, Services)
   end.
 
-shutdown(Services) ->
+shutdown(Running) ->
     io:format("~p netman: Shutting down subordinates...~n", [self()]),
-    [S ! shutdown || S <- Services],
+    [Pid ! shutdown || {Pid, _} <- Running],
     ok.
         

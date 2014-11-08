@@ -1,11 +1,30 @@
 -module(telnet).
--export([start/0, start/1]).
+-export([start/0, start/1, start_link/0, start_link/1]).
 
 %% Telnet service
 start() -> start(23).
 
 start(PortNum) ->
-    register(telnet, spawn(fun() -> init(PortNum) end)).
+    case whereis(telnet) of
+        undefined ->
+            Pid = spawn(fun() -> init(PortNum) end),
+            true = register(telnet, Pid),
+            {ok, Pid};
+        Pid -> 
+            {ok, Pid}
+    end.
+
+start_link() -> start_link(23).
+
+start_link(PortNum) ->
+    case whereis(telnet) of
+        undefined ->
+            Pid = spawn_link(fun() -> init(PortNum) end),
+            true = register(telnet, Pid),
+            {ok, Pid};
+        Pid ->
+            {ok, Pid}
+    end.
 
 init(PortNum) ->
     io:format("~p telnet: Starting up on port ~p.~n", [self(), PortNum]),
