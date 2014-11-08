@@ -55,7 +55,7 @@ create({Handle, PW}, Registry) ->
 verify({Handle, PW}, Registry) ->
     case lookup(Handle, Registry) of
         registered   ->
-            case orddict:fetch(Handle, Registry) =:= PW of
+            case string:equal(orddict:fetch(Handle, Registry), PW) of
                 true  -> verified;
                 false -> badpass
             end;

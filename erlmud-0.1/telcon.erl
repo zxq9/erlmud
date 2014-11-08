@@ -8,7 +8,7 @@ start_link(Talker) ->
 welcome(Talker) ->
     Greeting = greet(),
     Talker ! {send, Greeting},
-    Handle = receive {received, Bin} -> stringify(Bin) end,
+    Handle = receive {received, Bin} -> topline(Bin) end,
     case check_registry_for(Handle) of
         unregistered   -> register_acc(Talker, Handle);
         registered     -> authenticate(Talker, Handle);
@@ -21,15 +21,15 @@ welcome(Talker) ->
 
 register_acc(Talker, Handle) ->
     Talker ! {send, "\r\nLooks like you're new here.\r\nEnter a passphrase: "},
-    P1 = receive {received, P1Bin} -> stringify(P1Bin) end,
+    P1 = receive {received, P1Bin} -> topline(P1Bin) end,
     Talker ! {send, "Re-enter to confirm: "},
-    P2 = receive {received, P2Bin} -> stringify(P2Bin) end,
-    case P1 =:= P2 of
+    P2 = receive {received, P2Bin} -> topline(P2Bin) end,
+    case string:equal(P1, P2) of
         true  ->
             case create_acc(Handle, P1) of
                 ok  ->
                     M = "\r\nWelcome to ErlMUD, " ++ Handle ++ "!\r\n" ++
-                        "Enjoy your stay, and don't feed the trolls.\r\n" ++ prompt(),
+                        "Enjoy your stay, and don't feed the trolls.\r\n" ++ prompt(Handle),
                     Talker ! {send, M},
                     loop(Talker, Handle);
                 {error, handle_is_in_use} -> 
@@ -49,10 +49,10 @@ register_acc(Talker, Handle) ->
 
 authenticate(Talker, Handle) ->
     Talker ! {send, "Passphrase: "},
-    PW = receive {received, Bin} -> stringify(Bin) end,
+    PW = receive {received, Bin} -> topline(Bin) end,
     case check_password(Handle, PW) of
         verified ->
-            Salutation = "Welcome back, " ++ Handle ++ "!\r\n" ++ prompt(),
+            Salutation = "Welcome back, " ++ Handle ++ "!\r\n" ++ prompt(Handle),
             Talker ! {send, Salutation},
             loop(Talker, Handle);
         badpass ->
@@ -70,7 +70,7 @@ loop(Talker, Handle) ->
   receive
     {received, Bin} ->
         Message = stringify(Bin),
-        Reply = evaluate(Message) ++ "\r\n" ++ prompt(),
+        Reply = evaluate(Message) ++ "\r\n" ++ prompt(Handle),
         Talker ! {send, Reply},
         loop(Talker, Handle);
     shutdown ->
@@ -81,11 +81,31 @@ loop(Talker, Handle) ->
   end.
 
 %% Magic
-evaluate(Message) -> "Got: " ++ Message.
+stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
 
-stringify(Bin) -> binary_to_list(binary:replace(Bin, <<"\r\n">>, <<>>)).
+topline(Bin) ->
+    [Top|_] = stringify(Bin),
+    Top.
 
-prompt() -> "(Some Prompt)$ ".
+evaluate(Message) -> evaluate([], Message).
+
+evaluate(A, []) -> string:join(lists:reverse(A), "\r\n");
+evaluate(A, [TopLine | Rest]) ->
+    evaluate([parse(TopLine) | A], Rest).
+
+parse(Line) -> 
+    [Command | Tokens] = string:tokens(Line, " "),
+    parse(Command, Tokens, Line).
+
+parse("say", _, Line) ->
+    Phrase = string:strip(string:sub_string(Line, string:chr(Line, $\s))),
+    "You say,\"" ++ Phrase ++ "\"";
+    % say/1 should always pass through the location
+    % say(Phrase)
+
+parse(Other, _, _) -> "You don't know how to " ++ Other.
+
+prompt(Handle) -> Handle ++ " $ ".
 
 greet() ->
     "\r\nWelcome to ErlMUD\r\n\r\n"
