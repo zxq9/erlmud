@@ -5,22 +5,19 @@
 start(Parent) -> start(Parent, 23).
 
 start(Parent, PortNum) ->
-    case whereis(telnet) of
-        undefined ->
-            Pid = spawn(fun() -> init(Parent, PortNum) end),
-            true = register(telnet, Pid),
-            {ok, Pid};
-        Pid -> 
-            {ok, Pid}
-    end.
+    starter(fun spawn/1, Parent, PortNum).
 
 start_link(Parent) -> start_link(Parent, 23).
 
 start_link(Parent, PortNum) ->
-    case whereis(telnet) of
+    starter(fun spawn_link/1, Parent, PortNum).
+
+starter(Spawn, Parent, PortNum) ->
+    Name = ?MODULE,
+    case whereis(Name) of
         undefined ->
-            Pid = spawn_link(fun() -> init(Parent, PortNum) end),
-            true = register(telnet, Pid),
+            Pid = Spawn(fun() -> init(Parent, PortNum) end),
+            true = register(Name, Pid),
             {ok, Pid};
         Pid ->
             {ok, Pid}

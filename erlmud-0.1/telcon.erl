@@ -31,7 +31,7 @@ register_acc(Talker, Handle) ->
                     M = "\r\nWelcome to ErlMUD, " ++ Handle ++ "!\r\n" ++
                         "Enjoy your stay, and don't feed the trolls.\r\n" ++ prompt(Handle),
                     Talker ! {send, M},
-                    loop(Talker, Handle);
+                    init(Talker, Handle);
                 {error, handle_is_in_use} -> 
                     M = "\r\nSomeone else nabbed your handle!\r\n"
                         "Let's try this again...\r\n",
@@ -54,7 +54,7 @@ authenticate(Talker, Handle) ->
         verified ->
             Salutation = "Welcome back, " ++ Handle ++ "!\r\n" ++ prompt(Handle),
             Talker ! {send, Salutation},
-            loop(Talker, Handle);
+            init(Talker, Handle);
         badpass ->
             timer:sleep(7000),
             authenticate(Talker, Handle);
@@ -65,58 +65,87 @@ authenticate(Talker, Handle) ->
             authenticate(Talker, Handle)
     end.
 
+init(Talker, Handle) ->
+    Modules = [telcon],
+    Commands = load_command(Modules),
+    loop(Talker, Handle, Commands, Modules).
+
 %% Main service
-loop(Talker, Handle) ->
+loop(Talker, Handle, Commands, Modules) ->
   receive
     {received, Bin} ->
-        Message = stringify(Bin),
-        Reply = evaluate(Message) ++ "\r\n" ++ prompt(Handle),
-        Talker ! {send, Reply},
-        loop(Talker, Handle);
+        ok = evaluate(Bin, Talker, Handle, Commands),
+        loop(Talker, Handle, Commands, Modules);
     shutdown ->
         io:format("~p telcon: Shutting down.~n", [self()]);
     Any ->
         io:format("~p telcon: Received ~tp~n", [self(), Any]),
-        loop(Talker, Handle)
+        loop(Talker, Handle, Commands, Modules)
   end.
 
-%% Magic
+%% Input evaluation
+evaluate(Bin, Talker, Handle, Commands) ->
+    Line = topline(Bin),
+    {Action, Args} = interpret(Line, Commands),
+    Result = Action(Handle, Args),
+    Reply = Result ++ "\r\n" ++ prompt(Handle),
+    Talker ! {send, Reply},
+    ok.
+
+interpret(Line, Commands) ->
+    {Command, Args} = head(Line),
+    case orddict:find(Command, Commands) of
+        {ok, Action} -> {Action, Args};
+        error        -> {fun notify/2, "Arglebargle, glop-glyf!?!"}
+    end.
+
+%% Binary & string handling
+head(Line) ->
+    {Head, Tail} = head([], Line),
+    {lists:reverse(Head), Tail}.
+
+head(Word, []) ->
+    {Word, []};
+head([], Line = [H|T]) ->
+    case H of
+        $#  -> {"chat", Line};
+        $\\ -> {"sys", Line};
+        Z   -> head([Z], T)
+    end;
+head(Word, [H|T]) ->
+    case H of
+        $\s -> {Word, T};
+        Z   -> head([Z|Word], T)
+    end.
+
 stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
 
 topline(Bin) ->
     case stringify(Bin) of
-        []        -> "";
-        [Top | _] -> Top
+        [Top | _] -> Top;
+        []        -> ""
     end.
 
-evaluate(Message) -> evaluate([], Message).
+%% Controller actions
+notify(_, String) -> String.
 
-evaluate(A, []) -> string:join(lists:reverse(A), "\r\n");
-evaluate(A, [TopLine | Rest]) ->
-    evaluate([parse(TopLine) | A], Rest).
+echo(_, String) -> "echo: " ++ String.
 
-parse(Line) -> 
-    [Command | Tokens] = string:tokens(Line, " "),
-    parse(Command, Tokens, Line).
+quit(_, _) -> exit(quit).
 
-parse("say", _, Line) -> % say(Phrase)
-    % say/1 should always pass through the location
-    Phrase = phrasalate(Line),
-    "You say,\"" ++ Phrase ++ "\"";
-parse(Other, _, _) -> "You don't know how to " ++ Other.
-
-phrasalate(Line) ->
-    case string:chr(Line, $\s) of
-        0 -> "";
-        Z -> string:strip(string:substr(Line, Z))
-    end.
-
+%% Magic
 prompt(Handle) -> Handle ++ " $ ".
 
 greet() ->
     "\r\nWelcome to ErlMUD\r\n\r\n"
     "By what name do you wish to be known?\r\n"
     "$ ".
+
+% TODO: Query modules for available commands
+load_command(_Modules) ->
+    Z = [{"quit", fun quit/2},
+         {"echo", fun echo/2}],
+    orddict:from_list(Z).
 
 %% Accman interactions
 check_registry_for(Handle) ->
