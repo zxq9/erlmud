@@ -1,5 +1,5 @@
 -module(netman).
--export([start/1, start/2, start_link/1, start_link/2]).
+-export([start/1, start/2, start_link/1, start_link/2, code_change/3]).
 
 start(Parent) -> start(Parent, []).
 
@@ -29,40 +29,60 @@ start_link(Parent, Services) ->
 
 init(Parent, Services) ->
     process_flag(trap_exit, true),
-    io:format("~p netman: Starting services ~tp~n", [self(), Services]),
+    note("Starting services ~tp", [Services]),
     {ok, Running} = init_services(Services, []),
     loop(Parent, Running, Services).
 
 init_services([], A) -> {ok, A};
 init_services([{Module, Func, Args} | Rest], A)  ->
-    io:format("~p netman: Starting ~p~n", [self(), Module]),
+    note("Starting ~p", [Module]),
     {ok, Pid} = apply(Module, Func, [self() | Args]),
     init_services(Rest, [{Pid, Module} | A]).
 
 loop(Parent, Running, Services) ->
   receive
     status ->
-        io:format("~p netman: Active services: ~tp~n", [self(), Running]),
+        note("Active services: ~tp", [Running]),
         loop(Parent, Running, Services);
     {'EXIT', Parent, Reason} ->
-        io:format("~p netman: Parent ~tp died with ~tp~n", [self(), Parent, Reason]),
-        io:format("~p netman: Following my leige!~nBlarg!~n", [self()]),
+        note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]),
         shutdown(Running);
     {'EXIT', Pid, Reason} ->
         Service = proplists:get_value(Pid, Running),
-        io:format("~p netman: ~tp died with ~tp~n", [self(), Service, Reason]),
+        note("~tp died with ~tp", [Service, Reason]),
         init(Parent, Services);
+    code_change ->
+        ?MODULE:code_change(Parent, Running, Services);
     shutdown ->
+        note("Shutting down."),
         Parent ! {netman, shutdown},
         shutdown(Running),
-        io:format("~p netman: Shutting down.~n", [self()]),
         exit(shutdown);
     Any ->
-        io:format("~p netman: Received ~tp~n", [self(), Any]),
+        note("Received ~tp", [Any]),
         loop(Parent, Running, Services)
   end.
 
 shutdown(Running) ->
-    io:format("~p netman: Shutting down subordinates...~n", [self()]),
-    [Pid ! shutdown || {Pid, _} <- Running],
+    note("Shutting down subordinates..."),
+    Pids = live_pids(Running),
+    em_lib:broadcast(Pids, shutdown),
     ok.
+
+%% Magic
+live_pids(Running) ->
+    [Pid || {Pid, _} <- Running].
+
+%% Code changer
+code_change(Parent, Running, Services) ->
+    note("Changing code."),
+    Pids = live_pids(Running),
+    em_lib:broadcast(Pids, code_change),
+    loop(Parent, Running, Services).
+
+%% System
+note(String) ->
+    note(String, []).
+
+note(String, Args) ->
+    em_lib:note(?MODULE, String, Args).

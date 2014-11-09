@@ -1,26 +1,22 @@
 -module(accman).
--export([start/1, start/2, start_link/1, start_link/2]).
+-export([start/1, start/2, start_link/1, start_link/2, code_change/2]).
 
+%% Startup
 start(Parent) -> start(Parent, []).
 
 start(Parent, Conf) ->
-    Name = ?MODULE,
-    case whereis(Name) of
-        undefined ->
-            Pid = spawn(fun() -> init(Parent, Conf) end),
-            true = register(Name, Pid),
-            {ok, Pid};
-        Pid -> 
-            {ok, Pid}
-    end.
+    starter(fun spawn/1, Parent, Conf).
 
 start_link(Parent) -> start_link(Parent, []).
 
 start_link(Parent, Conf) ->
+    starter(fun spawn_link/1, Parent, Conf).
+
+starter(Spawn, Parent, Conf) ->
     Name = ?MODULE,
     case whereis(Name) of
         undefined ->
-            Pid = spawn_link(fun() -> init(Parent, Conf) end),
+            Pid = Spawn(fun() -> init(Parent, Conf) end),
             true = register(Name, Pid),
             {ok, Pid};
         Pid ->
@@ -28,7 +24,7 @@ start_link(Parent, Conf) ->
     end.
 
 init(Parent, Conf) ->
-    io:format("~p accman: Notional initialization with ~p.~n", [self(), Conf]),
+    note("Notional initialization with ~p", [Conf]),
     Registry = case Conf of
         [] -> orddict:new();
         _  -> init_registry(Conf)
@@ -37,6 +33,7 @@ init(Parent, Conf) ->
 
 init_registry(_) -> orddict:new().
 
+%% Service
 loop(Parent, Registry) ->
   receive
     {From, Ref, {lookup, Handle}} ->
@@ -57,17 +54,19 @@ loop(Parent, Registry) ->
                 loop(Parent, Updated)
         end;
     status ->
-        io:format("~p accman: Registry ~p~n", [self(), Registry]),
+        note("Registry ~p", [Registry]),
         loop(Parent, Registry);
+    code_change ->
+        ?MODULE:code_change(Parent, Registry);
     shutdown ->
-        io:format("~p accman: Shutting down.~n", [self()]),
+        note("Shutting down"),
         exit(shutdown);
     Any ->
-        io:format("~p accman: Received ~tp~n", [self(), Any]),
+        note("Received ~p", [Any]),
         loop(Parent, Registry)
   end.
 
-% Magic
+%% Magic
 lookup(Handle, Registry) ->
     case orddict:is_key(Handle, Registry) of
         true  -> registered;
@@ -89,3 +88,15 @@ verify({Handle, PW}, Registry) ->
             end;
         unregistered -> unregistered
     end.
+
+%% Code changer
+code_change(Parent, Registry) ->
+    note("Changing code."),
+    loop(Parent, Registry).
+
+%% System
+note(String) ->
+    note(String, []).
+
+note(String, Args) ->
+    em_lib:note(?MODULE, String, Args).

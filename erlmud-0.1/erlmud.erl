@@ -1,12 +1,12 @@
 -module(erlmud).
--export([start/0]).
+-export([start/0, code_change/2]).
 
 start() ->
     true = register(erlmud, spawn(fun() -> init() end)).
 
 init() ->
     process_flag(trap_exit, true),
-    io:format("~p erlmud: Starting up.~n", [self()]),
+    note("Starting up."),
     Services = [{chanman, start_link, []},
                 {accman, start_link, []},
                 {wayman, start_link, []},
@@ -22,6 +22,7 @@ init([{Module, Func, Args} | Rest], A) ->
     {ok, Pid} = apply(Module, Func, [self(), Args]),
     init(Rest, [{Pid, Module} | A]).
 
+%% Service
 loop(Running, Services) ->
   receive
     {From, Ref, {info, running}} ->
@@ -31,18 +32,39 @@ loop(Running, Services) ->
         From ! {Ref, Services},
         loop(Running, Services);
     status ->
-        io:format("~p erlmud: Active components: ~tp~n", [self(), Running]),
+        note("Active components: ~tp", [Running]),
         loop(Running, Services);
+    code_change ->
+        ?MODULE:code_change(Running, Services);
     shutdown ->
-        io:format("~p erlmud: Shutting down.~n", [self()]),
+        note("Shutting down."),
         shutdown(Running),
         exit(shutdown);
     Any ->
-        io:format("~p erlmud: Received ~tp~n", [self(), Any]),
+        note("Received ~tp", [Any]),
         loop(Running, Services)
   end.
 
 shutdown(Running) ->
-    io:format("~p erlmud: Shutting down subordinates...~n", [self()]),
-    [Pid ! shutdown || {Pid, _} <- Running],
+    note("Shutting down subordinates..."),
+    Pids = live_pids(Running),
+    em_lib:broadcast(Pids, shutdown),
     ok.
+
+%% Magic
+live_pids(Running) ->
+    [Pid || {Pid, _} <- Running].
+
+%% Code changer
+code_change(Running, Services) ->
+    note("Changing code."),
+    Pids = live_pids(Running),
+    em_lib:broadcast(Pids, code_change),
+    loop(Running, Services).
+
+%% System
+note(String) ->
+    note(String, []).
+
+note(String, Args) ->
+    em_lib:note(?MODULE, String, Args).
