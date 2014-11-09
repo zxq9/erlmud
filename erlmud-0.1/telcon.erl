@@ -131,6 +131,8 @@ notify(_, String) -> String.
 
 echo(_, String) -> "echo: " ++ String.
 
+nothing(_, _) -> "".
+
 quit(_, _) -> exit(quit).
 
 %% Magic
@@ -143,7 +145,8 @@ greet() ->
 
 % TODO: Query modules for available commands
 load_command(_Modules) ->
-    Z = [{"quit", fun quit/2},
+    Z = [{"", fun nothing/2},
+         {"quit", fun quit/2},
          {"echo", fun echo/2}],
     orddict:from_list(Z).
 
