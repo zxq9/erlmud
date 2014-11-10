@@ -30,6 +30,7 @@ init(Parent, PortNum) ->
     Connections = orddict:new(),
     accepting(Parent, PortNum, Connections, Port, Listener).
 
+%% Service states
 accepting(Parent, PortNum, Connections, Port, Listener) ->
   receive
     {new_connection, Socket} ->
@@ -46,8 +47,8 @@ accepting(Parent, PortNum, Connections, Port, Listener) ->
         gen_tcp:close(Port),
         refusing(Parent, PortNum, Connections);
     status ->
-        note("Accepting connections."),
-        note("  PortNum: ~p~n  Connections: ~p~n  Port: ~p~n  Listener: ~p",
+        note("Accepting connections.~n"
+             "  PortNum: ~p~n  Connections: ~p~n  Port: ~p~n  Listener: ~p",
              [PortNum, Connections, Port, Listener]),
         accepting(Parent, PortNum, Connections, Port, Listener);
     {'EXIT', Listener, Reason} ->
@@ -84,8 +85,8 @@ refusing(Parent, PortNum, Connections) ->
         {Port, Listener} = tcplistener:start(self(), PortNum),
         accepting(Parent, PortNum, Connections, Port, Listener);
     status ->
-        note("Refusing connections."),
-        note("  PortNum: ~p~n  Connections: ~p~n", [PortNum, Connections]),
+        note("Refusing connections.~n  PortNum: ~p~n  Connections: ~p~n",
+             [PortNum, Connections]),
         refusing(Parent, PortNum, Connections);
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]),
@@ -105,12 +106,12 @@ refusing(Parent, PortNum, Connections) ->
         refusing(Parent, PortNum, Connections)
   end.
 
+%% Magic
 close_all(Connections) ->
     Pids = live_pids(Connections),
     em_lib:broadcast(Pids, shutdown),
     ok.
 
-%% Magic
 live_pids(Connections) ->
     [Pid || {Pid, _} <- Connections].
 
