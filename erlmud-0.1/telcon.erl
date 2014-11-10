@@ -1,5 +1,5 @@
 -module(telcon).
--export([start_link/1]).
+-export([start_link/1, code_change/4]).
 
 start_link(Talker) ->
     spawn_link(fun() -> welcome(Talker) end).
@@ -13,8 +13,7 @@ welcome(Talker) ->
         unregistered   -> register_acc(Talker, Handle);
         registered     -> authenticate(Talker, Handle);
         {fail, Reason} ->
-            io:format("~p telcon: check_registry_for/1 failed with ~p~n",
-                      [self(), Reason]),
+            note("check_registry_for/1 failed with ~p~n", [Reason]),
             Talker ! {send, "Something went wrong, let's try that again...\r\n"},
             welcome(Talker)
     end.
@@ -38,7 +37,7 @@ register_acc(Talker, Handle) ->
                     Talker ! {send, M},
                     welcome(Talker);
                 {fail, Reason} ->
-                    io:format("~p telcon: create_acc/2 failed with ~p~n", [self(), Reason]),
+                    note("create_acc/2 failed with ~p~n", [Reason]),
                     Talker ! {send, "Something went wrong, let's try that again...\r\n"},
                     welcome(Talker)
             end;
@@ -59,8 +58,7 @@ authenticate(Talker, Handle) ->
             timer:sleep(7000),
             authenticate(Talker, Handle);
         {fail, Reason} ->
-            io:format("~p telcon: check_password/2 failed with ~p~n",
-                      [self(), Reason]),
+            note("check_password/2 failed with ~p~n", [Reason]),
             Talker ! {send, "Something went wrong, let's try that again...\r\n"},
             authenticate(Talker, Handle)
     end.
@@ -70,16 +68,18 @@ init(Talker, Handle) ->
     Commands = load_command(Modules),
     loop(Talker, Handle, Commands, Modules).
 
-%% Main service
+%% Service
 loop(Talker, Handle, Commands, Modules) ->
   receive
     {received, Bin} ->
         ok = evaluate(Bin, Talker, Handle, Commands),
         loop(Talker, Handle, Commands, Modules);
+    code_change ->
+        ?MODULE:code_change(Talker, Handle, Commands, Modules);
     shutdown ->
-        io:format("~p telcon: Shutting down.~n", [self()]);
+        note("Shutting down.~n");
     Any ->
-        io:format("~p telcon: Received ~tp~n", [self(), Any]),
+        note("Received ~tp~n", [Any]),
         loop(Talker, Handle, Commands, Modules)
   end.
 
@@ -159,3 +159,15 @@ check_password(Handle, PW) ->
 
 create_acc(Handle, PW) ->
     em_lib:call(accman, create, {Handle, PW}).
+
+%% Code changer
+code_change(Talker, Handle, Commands, Modules) ->
+    note("Changing code."),
+    loop(Talker, Handle, Commands, Modules).
+
+%% System
+note(String) ->
+    note(String, []).
+
+note(String, Args) ->
+    em_lib:note(?MODULE, String, Args).

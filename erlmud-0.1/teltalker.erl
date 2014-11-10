@@ -35,6 +35,7 @@ talk(Server, Socket, Telcon) ->
 %% Code changer
 code_change(Server, Socket, Telcon) ->
     note("Changing code."),
+    Telcon ! code_change,
     talk(Server, Socket, Telcon).
 
 %% System
