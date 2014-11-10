@@ -152,25 +152,10 @@ load_command(_Modules) ->
 
 %% Accman interactions
 check_registry_for(Handle) ->
-    call(accman, lookup, Handle).
+    em_lib:call(accman, lookup, Handle).
 
 check_password(Handle, PW) ->
-    call(accman, verify, {Handle, PW}).
+    em_lib:call(accman, verify, {Handle, PW}).
 
 create_acc(Handle, PW) ->
-    call(accman, create, {Handle, PW}).
-
-%% Synchronous handler
-call(Proc, Request, Data) ->
-    Ref = monitor(process, Proc),
-    Proc ! {self(), Ref, {Request, Data}},
-    receive
-        {Ref, Res} ->
-            demonitor(Ref, [flush]),
-            Res;
-        {'DOWN', Ref, process, Proc, Reason} ->
-            {fail, Reason}
-    after 1000 ->
-        io:format("~p: ask(~p, ~p, ~p) timed out.~n", [self(), Proc, Request, Data]),
-        {fail, timeout}
-    end.
+    em_lib:call(accman, create, {Handle, PW}).
