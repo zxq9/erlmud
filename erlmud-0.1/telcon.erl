@@ -189,8 +189,9 @@ echo(String) -> String.
 
 bargle() -> "Arglebargle, glop-glyf!?!".
 
-quit(Talker) ->
-    Talker ! {send, "Goodbye!\r\n"},
+quit({Talker, Handle}) ->
+    Message = "Goodbye, " ++ Handle ++ "!\r\n",
+    Talker ! {send, Message},
     exit(quit).
 
 sys({_State, Line}) ->
@@ -201,7 +202,8 @@ sys({_State, Line}) ->
         "join"  -> join(Channel);
         "leave" -> leave(Channel);
         _       -> bargle()
-    end.
+    end,
+    Result.
 
 world({_State, _Line}) ->
     "SYSTEM: World commands are not yet implemented".
