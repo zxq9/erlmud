@@ -1,4 +1,4 @@
--module(chanman).
+-module(conman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/2]).
 
 %% Startup
@@ -20,56 +20,43 @@ starter(Spawn, Parent, Conf) ->
 
 init(Parent, Conf) ->
     note("Notional initialization with ~tp.", [Conf]),
-    Channels = case Conf of
+    Controllers = case Conf of
         none -> orddict:new();
         _    -> init_registry(Conf)
     end,
-    loop(Parent, Channels).
+    loop(Parent, Controllers).
 
 init_registry(Conf) -> orddict:from_list(Conf).
 
 %% Service
-loop(Parent, Channels) ->
+loop(Parent, Controllers) ->
   receive
-    {From, Ref, {join, {Con, Channel}}} ->
-        ChanPid = join(Channel, Con, Channels),
-        From ! {Ref, ChanPid},
-        loop(Parent, Channels);
-    status ->
-        note("Channels ~p", [Channels]);
+    {From, Ref, {lookup, Handle}} ->
+        Pid = lookup(Handle, Controllers),
+        From ! {Ref, Pid},
+        loop(Parent, Controllers);
     code_change ->
-        ?MODULE:code_change(Parent, Channels);
+        ?MODULE:code_change(Parent, Controllers);
     shutdown ->
         note("Shutting down."),
         exit(shutdown);
     Any ->
         note("Received ~tp", [Any]),
-        loop(Parent, Channels)
+        loop(Parent, Controllers)
   end.
 
 %% Magic
-lookup(Name, Channels) ->
-    case orddict:find(Name, Channels) of
-        error   -> {error, absent};
-        ChanPid -> {ok, ChanPid}
+lookup(Name, Controllers) ->
+    case orddict:find(Name, Controllers) of
+        error  -> {error, absent};
+        ConPid -> {ok, ConPid}
     end.
 
-join(Channel, {Handle, ConPid}, Channels) ->
-    case lookup(Channel, Channels) of
-        {ok, ChanPid} ->
-            ChanPid ! {add, {Handle, ConPid}},
-            ChanPid;
-        {error, absent} ->
-            Owner = {Handle, {ConPid, owner}},
-            ChanPid = channel:start_link(self(), Channel, {[Owner], []}),
-            orddict:store(Channel, ChanPid, Channels),
-            ChanPid
-    end.
 
 %% Code changer
-code_change(Parent, Channels) ->
+code_change(Parent, Controllers) ->
     note("Changing code."),
-    loop(Parent, Channels).
+    loop(Parent, Controllers).
 
 %% System
 note(String) ->

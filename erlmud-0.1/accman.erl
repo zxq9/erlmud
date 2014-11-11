@@ -36,8 +36,8 @@ init_registry(_) -> orddict:new().
 %% Service
 loop(Parent, Registry) ->
   receive
-    {From, Ref, {lookup, Handle}} ->
-        Status = lookup(Handle, Registry),
+    {From, Ref, {check, Handle}} ->
+        Status = check(Handle, Registry),
         From ! {Ref, Status},
         loop(Parent, Registry);
     {From, Ref, {verify, Acc}} ->
@@ -67,20 +67,20 @@ loop(Parent, Registry) ->
   end.
 
 %% Magic
-lookup(Handle, Registry) ->
+check(Handle, Registry) ->
     case orddict:is_key(Handle, Registry) of
         true  -> registered;
         false -> unregistered
     end.
 
 create({Handle, PW}, Registry) ->
-    case lookup(Handle, Registry) of
+    case check(Handle, Registry) of
         unregistered -> orddict:store(Handle, PW, Registry);
         registered   -> {error, handle_in_use}
     end.
 
 verify({Handle, PW}, Registry) ->
-    case lookup(Handle, Registry) of
+    case check(Handle, Registry) of
         registered   ->
             case string:equal(orddict:fetch(Handle, Registry), PW) of
                 true  -> verified;

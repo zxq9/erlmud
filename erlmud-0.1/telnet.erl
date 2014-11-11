@@ -124,6 +124,7 @@ code_change(Continue, Args, Connections) ->
 
 do_change(accepting, {Parent, PortNum, Connections, Port}) ->
     gen_tcp:close(Port),
+    timer:sleep(1000),  % Give the OS time to react
     {NewPort, Listener} = tcplistener:start(self(), PortNum),
     accepting(Parent, PortNum, Connections, NewPort, Listener);
 do_change(refusing, {Parent, PortNum, Connections}) ->

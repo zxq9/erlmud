@@ -1,5 +1,5 @@
 -module(em_lib).
--export([note/3, broadcast/2, call/3]).
+-export([note/3, broadcast/2, call/2, call/3]).
 
 note(Module, String, Args) ->
     S = "~p ~p: " ++ String ++ "~n",
@@ -10,10 +10,13 @@ broadcast(Procs, Message) ->
     [Proc ! Message || Proc <- Procs],
     ok.
 
+call(Proc, Verb, Data) ->
+    call(Proc, {Verb, Data}).
+
 %% Synchronous handler
-call(Proc, Request, Data) ->
+call(Proc, Request) ->
     Ref = monitor(process, Proc),
-    Proc ! {self(), Ref, {Request, Data}},
+    Proc ! {self(), Ref, Request},
     receive
         {Ref, Res} ->
             demonitor(Ref, [flush]),
@@ -21,6 +24,6 @@ call(Proc, Request, Data) ->
         {'DOWN', Ref, process, Proc, Reason} ->
             {fail, Reason}
     after 1000 ->
-        io:format("~p: ask(~p, ~p, ~p) timed out.~n", [self(), Proc, Request, Data]),
+        io:format("~p: ask(~p) timed out.~n", [self(), Request]),
         {fail, timeout}
     end.
