@@ -1,6 +1,7 @@
 -module(telcon).
 -export([start_link/1, code_change/1]).
 
+%% Startup
 start_link(Talker) ->
     spawn_link(fun() -> welcome(Talker) end).
 
@@ -118,14 +119,11 @@ evaluate(Bin, State = {Talker, Handle, _, _}) ->
     Talker ! {send, Reply},
     ok.
 
-interpret(Expansion, State = {Talker, Handle, Minion, Channels}) ->
+interpret(Expansion, State = {_, Handle, Minion, Channels}) ->
     {Keyword, Line} = head(Expansion),
     Action = case Keyword of
         "chat"  -> {command, fun chat/1, {Handle, Channels, Line}};
         "sys"   -> {command, fun sys/1, {State, Line}};
-        "world" -> {command, fun world/1, {State, Line}};
-        "echo"  -> {command, fun echo/1, Line};
-        "quit"  -> {command, fun quit/1, {Talker, Handle}};
         "help"  -> {command, fun help/1, Minion};
         ""      -> none;
         _       -> {action, Keyword, Line}
@@ -159,7 +157,6 @@ rewrite(Line = [H|T]) ->
     case H of
         $#  -> "chat " ++ T;
         $\\ -> "sys " ++ T;
-        $@  -> "world " ++ T;
         $?  -> "help " ++ T;
         _   -> Line
     end.
@@ -189,24 +186,23 @@ echo(String) -> String.
 
 bargle() -> "Arglebargle, glop-glyf!?!".
 
-quit({Talker, Handle}) ->
+quit(Talker, Handle) ->
     Message = "Goodbye, " ++ Handle ++ "!\r\n",
     Talker ! {send, Message},
     exit(quit).
 
-sys({_State, Line}) ->
+sys({{Talker, Handle, _, _}, Line}) ->
     {Keyword, String} = head(Line),
     {Channel, _} = head(String),
     Result = case Keyword of
         "list"  -> list();
         "join"  -> join(Channel);
         "leave" -> leave(Channel);
+        "echo"  -> echo(Line);
+        "quit"  -> quit(Talker, Handle);
         _       -> bargle()
     end,
     Result.
-
-world({_State, _Line}) ->
-    "SYSTEM: World commands are not yet implemented".
 
 help({_, _, Actions}) ->
     Sys = sys_help(),
@@ -250,13 +246,13 @@ sys_help() ->
     "Available commands:\r\n"
     "------------------------------------------------------------------------\r\n"
     "chat Channel Text\r\n"
-    "echo Text\r\n"
     "sys Command [Args]\r\n"
     "  where Command is:\r\n"
     "    join Channel\r\n"
     "    leave Channel\r\n"
     "    list\r\n"
-    "quit\r\n"
+    "    echo Text\r\n"
+    "    quit\r\n"
     "\r\n"
     "Shortcuts:\r\n"
     "------------------------------------------------------------------------\r\n"

@@ -2,15 +2,10 @@
 -export([start/1, start/2, start_link/1, start_link/2, code_change/2]).
 
 %% Startup
-start(Parent) -> start(Parent, []).
-
-start(Parent, Conf) ->
-    starter(fun spawn/1, Parent, Conf).
-
-start_link(Parent) -> start_link(Parent, []).
-
-start_link(Parent, Conf) ->
-    starter(fun spawn_link/1, Parent, Conf).
+start(Parent)            -> start(Parent, []).
+start(Parent, Conf)      -> starter(fun spawn/1, Parent, Conf).
+start_link(Parent)       -> start_link(Parent, []).
+start_link(Parent, Conf) -> starter(fun spawn_link/1, Parent, Conf).
 
 starter(Spawn, Parent, Conf) ->
     Name = ?MODULE,

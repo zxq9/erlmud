@@ -1,26 +1,17 @@
 -module(netman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/3]).
 
-start(Parent) -> start(Parent, []).
+%% Startup
+start(Parent)                -> start(Parent, []).
+start(Parent, Services)      -> starter(fun spawn/1, Parent, Services).
+start_link(Parent)           -> start_link(Parent, []).
+start_link(Parent, Services) -> starter(fun spawn_link/1, Parent, Services).
 
-start(Parent, Services) ->
+starter(Spawn, Parent, Services) ->
     Name = ?MODULE,
     case whereis(Name) of
         undefined ->
-            Pid = spawn(fun() -> init(Parent, Services) end),
-            true = register(Name, Pid),
-            {ok, Pid};
-        Pid -> 
-            {ok, Pid}
-    end.
-
-start_link(Parent) -> start_link(Parent, []).
-
-start_link(Parent, Services) ->
-    Name = ?MODULE,
-    case whereis(Name) of
-        undefined ->
-            Pid = spawn_link(fun() -> init(Parent, Services) end),
+            Pid = Spawn(fun() -> init(Parent, Services) end),
             true = register(Name, Pid),
             {ok, Pid};
         Pid ->
@@ -39,6 +30,7 @@ init_services([{Module, Func, Args} | Rest], A)  ->
     {ok, Pid} = apply(Module, Func, [self() | Args]),
     init_services(Rest, [{Pid, Module} | A]).
 
+%% Service
 loop(Parent, Running, Services) ->
   receive
     status ->

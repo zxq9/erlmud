@@ -1,16 +1,11 @@
 -module(telnet).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/3]).
 
-%% Telnet service
-start(Parent) -> start(Parent, 23).
-
-start(Parent, PortNum) ->
-    starter(fun spawn/1, Parent, PortNum).
-
-start_link(Parent) -> start_link(Parent, 23).
-
-start_link(Parent, PortNum) ->
-    starter(fun spawn_link/1, Parent, PortNum).
+%% Startup
+start(Parent)               -> start(Parent, 23).
+start(Parent, PortNum)      -> starter(fun spawn/1, Parent, PortNum).
+start_link(Parent)          -> start_link(Parent, 23).
+start_link(Parent, PortNum) -> starter(fun spawn_link/1, Parent, PortNum).
 
 starter(Spawn, Parent, PortNum) ->
     Name = ?MODULE,
