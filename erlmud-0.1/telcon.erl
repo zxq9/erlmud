@@ -88,6 +88,9 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, _Actions}, Channels}) ->
     {chat, Message} ->
         unprompted(Message, State),
         loop(State);
+    {notice, Message} ->
+        unprompted(Message, State),
+        loop(State);
     {acquire_minion, Pid} ->
         NewMinion = acquire_minion(Pid),
         loop({Talker, Handle, NewMinion, Channels});
@@ -182,7 +185,7 @@ stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
 %% Controller actions
 echo(String) -> String.
 
-bargle() -> "Arglebargle, glop-glyf!?!".
+bargle() -> "Arglebargle, glop-glyph!?!".
 
 quit(Talker, Handle) ->
     Message = "Goodbye, " ++ Handle ++ "!\r\n",
@@ -326,8 +329,8 @@ handle_down(State = {Talker, Handle, Minion, Channels},
             note("Received ~p", [Message]),
             State;
         Chan = {Channel, _, _} ->
-            Message = "CHAT: Channel #" ++ Channel ++ " closed.\r\n",
-            Talker ! {send, Message},
+            Notice = "CHAT: Channel " ++ Channel ++ " closed.",
+            unprompted(Notice, State),
             NewChannels = lists:delete(Chan, Channels),
             {Talker, Handle, Minion, NewChannels}
     end.

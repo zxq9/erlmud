@@ -19,6 +19,7 @@ starter(Spawn, Parent, Conf) ->
     end.
 
 init(Parent, Conf) ->
+    process_flag(trap_exit, true),
     note("Notional initialization with ~tp.", [Conf]),
     Channels = [],
     loop(Parent, Channels).
@@ -31,11 +32,14 @@ loop(Parent, Channels) ->
         From ! {Ref, ChanPid},
         loop(Parent, NewChannels);
     {From, Ref, list} ->
-        List = [Name || {Name, _, _} <- Channels],
+        List = [Name || {Name, _} <- Channels],
         From ! {Ref, List},
         loop(Parent, Channels);
-    Message = {'DOWN', _, process, _, _} ->
-        NewChannels = handle_down(Channels, Message),
+    {'EXIT', Parent, Reason} ->
+        note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]),
+        exit(parent_died);
+    Message = {'EXIT', _, _} ->
+        NewChannels = handle_exit(Channels, Message),
         loop(Parent, NewChannels);
     status ->
         note("Channels ~p", [Channels]),
@@ -53,17 +57,17 @@ loop(Parent, Channels) ->
 %% Magic
 acquire(Channel, Channels) ->
     case lists:keyfind(Channel, 1, Channels) of
-        {_, Pid, _} ->
+        {_, Pid} ->
             {Pid, Channels};
         false ->
             Conf = {Channel, [], []},
-            {Pid, Ref} = channel:start_monitor(self(), Conf),
-            NewChannels = [{Channel, Pid, Ref} | Channels],
+            Pid = channel:start_link(self(), Conf),
+            NewChannels = [{Channel, Pid} | Channels],
             {Pid, NewChannels}
     end.
 
-handle_down(Channels, Message = {_, Ref, _, _, _}) ->
-    case lists:keyfind(Ref, 3, Channels) of
+handle_exit(Channels, Message = {_, Pid, _}) ->
+    case lists:keyfind(Pid, 2, Channels) of
         false ->
             note("Received ~p", [Message]),
             Channels;

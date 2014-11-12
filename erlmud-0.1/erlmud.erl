@@ -31,6 +31,9 @@ loop(Running, Services) ->
     {From, Ref, {info, services}} ->
         From ! {Ref, Services},
         loop(Running, Services);
+    Message = {'EXIT', _, _} ->
+        NewRunning = restart(Message, Running, Services),
+        loop(NewRunning, Services);
     status ->
         note("Active components: ~tp", [Running]),
         loop(Running, Services);
@@ -50,6 +53,21 @@ shutdown(Running) ->
     Pids = live_pids(Running),
     em_lib:broadcast(Pids, shutdown),
     ok.
+
+restart(Message = {'EXIT', Pid, Reason},
+        Running,
+        Services) ->
+    case lists:keyfind(Pid, 1, Running) of
+        undefined ->
+            note("Received ~p", [Message]),
+            {Running, Services};
+        Dead = {_, Name} ->
+            note("Service ~p exited with ~p", [Name, Reason]),
+            Dropped = lists:delete(Dead, Running),
+            {M, F, A} = lists:keyfind(Name, 1, Services),
+            {ok, NewPid} = apply(M, F, [self(), A]),
+            [{NewPid, Name} | Dropped]
+    end.
 
 %% Magic
 live_pids(Running) ->

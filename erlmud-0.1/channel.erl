@@ -1,9 +1,9 @@
 -module(channel).
--export([start/2, start_monitor/2, code_change/1]).
+-export([start/2, start_link/2, code_change/1]).
 
 %% Startup
 start(Parent, Conf)         -> starter(fun spawn/1, Parent, Conf).
-start_monitor(Parent, Conf) -> starter(fun spawn_monitor/1, Parent, Conf).
+start_link(Parent, Conf) -> starter(fun spawn_link/1, Parent, Conf).
 
 starter(Spawn, Parent, Conf) -> Spawn(fun() -> init(Parent, Conf) end).
 
