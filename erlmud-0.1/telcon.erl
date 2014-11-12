@@ -65,13 +65,13 @@ authenticate(Talker, Handle) ->
     end.
 
 init(Talker, Handle) ->
-    Minion = none,
-    Actions = init_actions(Minion),
+    Actions = init_actions(none),
+    Minion = {none, none, Actions},
     Channels = init_channels(Handle),
-    State = {Talker, Handle, {Minion, none, Actions}, Channels},
+    State = {Talker, Handle, Minion, Channels},
     loop(State).
 
-init_channels(_) -> dict:new().
+init_channels(_) -> [].
 
 init_actions(Minion) ->
     case Minion of
@@ -80,23 +80,28 @@ init_actions(Minion) ->
     end.
 
 %% Service
-loop(State = {Talker, Handle, _Minion = {Pid, Ref, _Actions}, Channels}) ->
+loop(State = {Talker, Handle, Minion = {MPid, MRef, _Actions}, Channels}) ->
   receive
     {received, Bin} ->
-        ok = evaluate(Bin, State),
+        NewState = evaluate(Bin, State),
+        loop(NewState);
+    {chat, Message} ->
+        unprompted(Message, State),
         loop(State);
-    {notice, Message} ->
-        Talker ! {send, Message ++ "\r\n"};
-    {output, Data} ->
-        Talker ! {send, Data},
-        loop(State);
-    {control_minion, Pid} ->
+    {acquire_minion, Pid} ->
         NewMinion = acquire_minion(Pid),
         loop({Talker, Handle, NewMinion, Channels});
-    {'DOWN', Ref, process, Pid, _Reason} ->
-        Talker ! {send, "Minion disconnected.\r\n"},
+    {'DOWN', MRef, process, MPid, _Reason} ->
+        unprompted("Minion disconnected.", State),
         Actions = init_actions(none),
         loop({Talker, Handle, {none, none, Actions}, Channels});
+    Message = {'DOWN', _, process, _, _} ->
+        NewState = handle_down(State, Message),
+        loop(NewState);
+    status ->
+        note("Status:~n  Talker: ~p~n  Handle: ~p~n  Minion: ~p~n, Channels: ~p",
+             [Talker, Handle, Minion, Channels]),
+        loop(State);
     code_change ->
         ?MODULE:code_change(State);
     shutdown ->
@@ -110,31 +115,24 @@ loop(State = {Talker, Handle, _Minion = {Pid, Ref, _Actions}, Channels}) ->
 evaluate(Bin, State = {Talker, Handle, _, _}) ->
     Line = topline(Bin),
     Expansion = rewrite(Line),
-    Result = interpret(Expansion, State),
-    Reply = case Result of
+    {Response, NewState} = interpret(Expansion, State),
+    Reply = case Response of
         none -> prompt(Handle);
         ok   -> "ok" ++ "\r\n" ++ prompt(Handle);
         Any  -> Any ++ "\r\n" ++ prompt(Handle)
     end,
     Talker ! {send, Reply},
-    ok.
+    NewState.
 
-interpret(Expansion, State = {_, Handle, Minion, Channels}) ->
+interpret(Expansion, State = {_, _, Minion, Channels}) ->
     {Keyword, Line} = head(Expansion),
-    Action = case Keyword of
-        "chat"  -> {command, fun chat/1, {Handle, Channels, Line}};
-        "sys"   -> {command, fun sys/1, {State, Line}};
-        "help"  -> {command, fun help/1, Minion};
-        ""      -> none;
-        _       -> {action, Keyword, Line}
-    end,
-    Result = case Action of
-        {command, Fun, Args}   -> Fun(Args);
-        {action, Verb, String} -> perform(Verb, String, Minion);
-        none                   -> none;
-        _                      -> bargle()
-    end,
-    Result.
+    case Keyword of
+        "chat"  -> {chat(Channels, Line), State};
+        "sys"   -> sys(State, Line);
+        "help"  -> {help(Minion), State};
+        ""      -> {none, State};
+        _       -> {perform(Keyword, Line, Minion), State}
+    end.
 
 perform(Keyword, String, {Pid, _, Actions}) ->
     case Pid of
@@ -155,7 +153,7 @@ perform(Keyword, String, {Pid, _, Actions}) ->
 rewrite([]) -> [];
 rewrite(Line = [H|T]) ->
     case H of
-        $#  -> "chat " ++ T;
+        $#  -> "chat " ++ Line;
         $\\ -> "sys " ++ T;
         $?  -> "help " ++ T;
         _   -> Line
@@ -191,18 +189,16 @@ quit(Talker, Handle) ->
     Talker ! {send, Message},
     exit(quit).
 
-sys({{Talker, Handle, _, _}, Line}) ->
+sys(State = {Talker, Handle, _, Channels}, Line) ->
     {Keyword, String} = head(Line),
-    {Channel, _} = head(String),
-    Result = case Keyword of
-        "list"  -> list();
-        "join"  -> join(Channel);
-        "leave" -> leave(Channel);
-        "echo"  -> echo(Line);
+    case Keyword of
+        "list"  -> {list(Channels), State};
+        "join"  -> join(State, String);
+        "leave" -> leave(State, String);
+        "echo"  -> {echo(Line), State};
         "quit"  -> quit(Talker, Handle);
-        _       -> bargle()
-    end,
-    Result.
+        _       -> {bargle(), State}
+    end.
 
 help({_, _, Actions}) ->
     Sys = sys_help(),
@@ -213,29 +209,71 @@ help({_, _, Actions}) ->
     Sys ++ A.
 
 %% Chat
-list() ->
-    "I'm sorry, I can't let you do that, Dave.".
+chanhead(String) ->
+    {Word, Line} = head(String),
+    Channel = case Word of
+        [$#|_] -> Word;
+        _      -> [$#|Word]
+    end,
+    {Channel, Line}.
 
-join([]) -> bargle();
-join(Channel) ->
-    "Think you're good enough to be in " ++ Channel ++ ", eh?".
+list(Channels) ->
+    List = em_lib:call(chanman, list),
+    Mine = [Name || {Name, _, _} <- Channels],
+    NotMine = lists:subtract(List, Mine),
+    Message = "  Channels joined:\r\n" ++
+        string:join(Mine, "\r\n") ++
+        "\r\n  Available channels:\r\n" ++
+        string:join(NotMine, "\r\n"),
+    Message.
 
-leave([]) -> bargle();
-leave(Channel) ->
-    "Think you're too good for " ++ Channel ++ ", eh?".
+join(State, []) -> {bargle(), State};
+join(State = {Talker, Handle, Minion, Channels}, String) ->
+    {Channel, _} = chanhead(String),
+    case lists:keymember(Channel, 1, Channels) of
+        true ->
+            Response = "Already in " ++ Channel,
+            {Response, State};
+        false ->
+            ChanPid = em_lib:call(chanman, acquire, Channel),
+            ChanMon = monitor(process, ChanPid),
+            ChanPid ! {join, {Handle, self()}},
+            NewChannels = [{Channel, ChanPid, ChanMon} | Channels],
+            NewState = {Talker, Handle, Minion, NewChannels},
+            {ok, NewState}
+    end.
 
-chat({Handle, Channels, Line}) ->
-    {Channel, Message} = head(Line),
-    case dict:find(Channel, Channels) of
-        error ->
-            "You aren't in #" ++ Channel;
-        Pid   ->
-            Pid ! {chat, {Handle, Message}},
+leave(State, []) -> {bargle(), State};
+leave(State = {Talker, Handle, Minion, Channels}, String) ->
+    {Channel, _} = chanhead(String),
+    case lists:keyfind(Channel, 1, Channels) of
+        false ->
+            Response = "You're not in " ++ Channel,
+            {Response, State};
+        Chan = {Channel, ChanPid, ChanMon} ->
+            NewChannels = lists:delete(Chan, Channels),
+            demonitor(ChanMon),
+            ChanPid ! {leave, self()},
+            NewState = {Talker, Handle, Minion, NewChannels},
+            {ok, NewState}
+    end.
+
+chat(Channels, Line) ->
+    {Channel, Message} = chanhead(Line),
+    case lists:keyfind(Channel, 1, Channels) of
+        false ->
+            "You aren't in " ++ Channel;
+        {_, Pid, _}   ->
+            Pid ! {chat, {self(), Message}},
             none
     end.
 
 %% Magic
 prompt(Handle) -> Handle ++ " $ ".
+
+unprompted(Data, {Talker, Handle, _, _}) ->
+    Message = "\r" ++ Data ++ "\r\n" ++ prompt(Handle),
+    Talker ! {send, Message}.
 
 greet() ->
     "\r\nWelcome to ErlMUD\r\n\r\n"
@@ -279,6 +317,20 @@ verify(Handle, PW) ->
 
 create_acc(Handle, PW) ->
     em_lib:call(accman, create, {Handle, PW}).
+
+%% Handler
+handle_down(State = {Talker, Handle, Minion, Channels},
+            Message = {'DOWN', Ref, process, _, _}) ->
+    case lists:keyfind(Ref, 3, Channels) of
+        false ->
+            note("Received ~p", [Message]),
+            State;
+        Chan = {Channel, _, _} ->
+            Message = "CHAT: Channel #" ++ Channel ++ " closed.\r\n",
+            Talker ! {send, Message},
+            NewChannels = lists:delete(Chan, Channels),
+            {Talker, Handle, Minion, NewChannels}
+    end.
 
 %% Code changer
 code_change(State) ->

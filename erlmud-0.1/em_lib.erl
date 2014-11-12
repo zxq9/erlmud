@@ -24,6 +24,6 @@ call(Proc, Request) ->
         {'DOWN', Ref, process, Proc, Reason} ->
             {fail, Reason}
     after 1000 ->
-        io:format("~p: ask(~p) timed out.~n", [self(), Request]),
+        io:format("~p: call(~p, ~p) timed out.~n", [self(), Proc, Request]),
         {fail, timeout}
     end.

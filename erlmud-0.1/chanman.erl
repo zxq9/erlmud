@@ -20,23 +20,26 @@ starter(Spawn, Parent, Conf) ->
 
 init(Parent, Conf) ->
     note("Notional initialization with ~tp.", [Conf]),
-    Channels = case Conf of
-        none -> orddict:new();
-        _    -> init_registry(Conf)
-    end,
+    Channels = [],
     loop(Parent, Channels).
-
-init_registry(Conf) -> orddict:from_list(Conf).
 
 %% Service
 loop(Parent, Channels) ->
   receive
-    {From, Ref, {join, {Con, Channel}}} ->
-        ChanPid = join(Channel, Con, Channels),
+    {From, Ref, {acquire, Channel}} ->
+        {ChanPid, NewChannels} = acquire(Channel, Channels),
         From ! {Ref, ChanPid},
+        loop(Parent, NewChannels);
+    {From, Ref, list} ->
+        List = [Name || {Name, _, _} <- Channels],
+        From ! {Ref, List},
         loop(Parent, Channels);
+    Message = {'DOWN', _, process, _, _} ->
+        NewChannels = handle_down(Channels, Message),
+        loop(Parent, NewChannels);
     status ->
-        note("Channels ~p", [Channels]);
+        note("Channels ~p", [Channels]),
+        loop(Parent, Channels);
     code_change ->
         ?MODULE:code_change(Parent, Channels);
     shutdown ->
@@ -48,22 +51,25 @@ loop(Parent, Channels) ->
   end.
 
 %% Magic
-lookup(Name, Channels) ->
-    case orddict:find(Name, Channels) of
-        error   -> {error, absent};
-        ChanPid -> {ok, ChanPid}
+acquire(Channel, Channels) ->
+    case lists:keyfind(Channel, 1, Channels) of
+        {_, Pid, _} ->
+            {Pid, Channels};
+        false ->
+            Conf = {Channel, [], []},
+            {Pid, Ref} = channel:start_monitor(self(), Conf),
+            NewChannels = [{Channel, Pid, Ref} | Channels],
+            {Pid, NewChannels}
     end.
 
-join(Channel, {Handle, ConPid}, Channels) ->
-    case lookup(Channel, Channels) of
-        {ok, ChanPid} ->
-            ChanPid ! {add, {Handle, ConPid}},
-            ChanPid;
-        {error, absent} ->
-            Owner = {Handle, {ConPid, owner}},
-            ChanPid = channel:start_link(self(), Channel, {[Owner], []}),
-            orddict:store(Channel, ChanPid, Channels),
-            ChanPid
+handle_down(Channels, Message = {_, Ref, _, _, _}) ->
+    case lists:keyfind(Ref, 3, Channels) of
+        false ->
+            note("Received ~p", [Message]),
+            Channels;
+        Channel ->
+            note("~p sent 'DOWN'", [Channel]),
+            lists:delete(Channel, Channels)
     end.
 
 %% Code changer
