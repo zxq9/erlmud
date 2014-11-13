@@ -1,17 +1,38 @@
 -module(accman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/2,
-         check/1, verify/2, create/2]).
+         salthash/1, salthash/2, checkhash/2, check/1, verify/2, create/2]).
 
 %% Interface
+
+salthash(Bin) ->
+    Salt = salt(),
+    Hash = hash(<<Salt/binary, Bin/binary>>),
+    {Salt, Hash}.
+
+salthash(Salt, Bin) ->
+    Hash = hash(<<Salt/binary, Bin/binary>>),
+    {Salt, Hash}.
+
+checkhash({Salt, Hash}, Bin) ->
+    Test = hash(<<Salt/binary, Bin/binary>>),
+    Test =:= Hash.
 
 check(Handle) ->
     call({check, Handle}).
 
 verify(Handle, PW) ->
-    call({verify, {Handle, PW}}).
+    case call({get_hash, Handle}) of
+        {ok, PassHash} ->
+            case checkhash(PassHash, PW) of
+                true  -> verified;
+                false -> badpass
+            end;
+        Error ->
+            Error
+    end.
 
-create(Handle, PW) ->
-    call({create, {Handle, PW}}).
+create(Handle, PassHash) ->
+    call({create, {Handle, PassHash}}).
 
 call(Request) ->
     em_lib:call(?MODULE, Request).
@@ -36,12 +57,12 @@ starter(Spawn, Parent, Conf) ->
 init(Parent, Conf) ->
     note("Notional initialization with ~p", [Conf]),
     Registry = case Conf of
-        [] -> orddict:new();
+        [] -> dict:new();
         _  -> init_registry(Conf)
     end,
     loop(Parent, Registry).
 
-init_registry(_) -> orddict:new().
+init_registry(_) -> dict:new().
 
 %% Service
 loop(Parent, Registry) ->
@@ -50,21 +71,22 @@ loop(Parent, Registry) ->
         Status = do_check(Handle, Registry),
         From ! {Ref, Status},
         loop(Parent, Registry);
-    {From, Ref, {verify, Acc}} ->
-        Response = do_verify(Acc, Registry),
+    {From, Ref, {get_hash, Handle}} ->
+        Response = get_hash(Handle, Registry),
         From ! {Ref, Response},
         loop(Parent, Registry);
     {From, Ref, {create, Acc}} ->
         case do_create(Acc, Registry) of
-            Error = {error, _} ->
-                From ! {Ref, Error},
-                loop(Parent, Registry);
-            Updated ->
+            {ok, NewRegistry} ->
                 From ! {Ref, ok},
-                loop(Parent, Updated)
+                loop(Parent, NewRegistry);
+            Error ->
+                From ! {Ref, Error},
+                loop(Parent, Registry)
         end;
     status ->
-        note("Registry ~p", [Registry]),
+        List = dict:to_list(Registry),
+        note("Registry ~p", [List]),
         loop(Parent, Registry);
     code_change ->
         ?MODULE:code_change(Parent, Registry);
@@ -78,26 +100,26 @@ loop(Parent, Registry) ->
 
 %% Magic
 do_check(Handle, Registry) ->
-    case orddict:is_key(Handle, Registry) of
+    case dict:is_key(Handle, Registry) of
         true  -> registered;
         false -> unregistered
     end.
 
-do_create({Handle, PW}, Registry) ->
+do_create({Handle, PassHash}, Registry) ->
     case do_check(Handle, Registry) of
-        unregistered -> orddict:store(Handle, PW, Registry);
+        unregistered -> {ok, dict:store(Handle, PassHash, Registry)};
         registered   -> {error, handle_in_use}
     end.
 
-do_verify({Handle, PW}, Registry) ->
-    case do_check(Handle, Registry) of
-        registered   ->
-            case string:equal(orddict:fetch(Handle, Registry), PW) of
-                true  -> verified;
-                false -> badpass
-            end;
-        unregistered -> unregistered
+get_hash(Handle, Registry) ->
+    case dict:find(Handle, Registry) of
+        {ok, PassHash} -> {ok, PassHash};
+        error          -> {fail, unregistered}
     end.
+
+salt() -> crypto:rand_bytes(64).
+
+hash(Bin) -> crypto:hash(sha512, Bin).
 
 %% Code changer
 code_change(Parent, Registry) ->

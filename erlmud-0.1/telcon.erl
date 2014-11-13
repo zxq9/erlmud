@@ -21,12 +21,16 @@ welcome(Talker) ->
 
 register_acc(Talker, Handle) ->
     Talker ! {send, "\r\nLooks like you're new here.\r\nEnter a passphrase: "},
-    P1 = receive {received, P1Bin} -> topline(P1Bin) end,
+    PassHash =
+        receive {received, P1Bin} ->
+            accman:salthash(topbin(P1Bin)) end,
     Talker ! {send, "Re-enter to confirm: "},
-    P2 = receive {received, P2Bin} -> topline(P2Bin) end,
-    case string:equal(P1, P2) of
+    Check =
+        receive {received, P2Bin} ->
+            accman:checkhash(PassHash, topbin(P2Bin)) end,
+    case Check of
         true  ->
-            case accman:create(Handle, P1) of
+            case accman:create(Handle, PassHash) of
                 ok  ->
                     M = "\r\nWelcome to ErlMUD, " ++ Handle ++ "!\r\n" ++
                         "Enjoy your stay, and don't feed the trolls.\r\n" ++ prompt(Handle),
@@ -49,7 +53,7 @@ register_acc(Talker, Handle) ->
 
 authenticate(Talker, Handle) ->
     Talker ! {send, "Passphrase: "},
-    PW = receive {received, Bin} -> topline(Bin) end,
+    PW = receive {received, Bin} -> topbin(Bin) end,
     case accman:verify(Handle, PW) of
         verified ->
             Salutation = "Welcome back, " ++ Handle ++ "!\r\n" ++ prompt(Handle),
@@ -175,13 +179,13 @@ head(Word, [H|T]) ->
         Z   -> head([Z|Word], T)
     end.
 
-topline(Bin) ->
-    case stringify(Bin) of
-        [Top | _] -> Top;
-        []        -> ""
-    end.
+topbin(Bin) ->
+    [H|_] = binary:split(Bin, <<"\r\n">>),
+    H.
 
-stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
+topline(Bin) -> binary_to_list(topbin(Bin)).
+
+%stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
 
 %% Controller actions
 who(State, _) ->
@@ -211,10 +215,10 @@ sys(State = {Talker, Handle, _, Channels}, Line) ->
 help({_, _, Actions}) ->
     Sys = sys_help(),
     A = case dict:to_list(Actions) of
-        []        -> "    none (no minion currently under control)";
-        Available -> "    " ++ string:join([String || {String, _} <- Available], "\r\n    ")
+        []        -> "none (no minion currently under control)";
+        Available -> string:join([String || {String, _} <- Available], "\r\n    ")
     end,
-    Sys ++ A.
+    Sys ++ "    " ++ A.
 
 %% Chat
 chan(Line, Channels) ->
@@ -236,7 +240,8 @@ show(Channels) ->
                 Count =< 0 -> "[None]"
             end
         end,
-    Message = "  Channels joined:\r\n    " ++
+    Message =
+        "  Channels joined:\r\n    " ++
         DisplayList(Mine) ++
         "\r\n  Available channels:\r\n    " ++
         DisplayList(NotMine),
