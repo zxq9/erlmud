@@ -1,11 +1,14 @@
 -module(chanman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/2,
-         list/0, acquire/1]).
+         list/0, get_pid/1, acquire/1]).
 
 %% Interface
 
 list() ->
     call(list).
+
+get_pid(Channel) ->
+    call({get_pid, Channel}).
 
 acquire(Channel) ->
     call({acquire, Channel}).
@@ -47,6 +50,10 @@ loop(Parent, Channels) ->
         List = [Name || {Name, _} <- Channels],
         From ! {Ref, List},
         loop(Parent, Channels);
+    {From, Ref, {get_pid, Channel}} ->
+        Result = lookup(Channel, Channels),
+        From ! {Ref, Result},
+        loop(Parent, Channels);
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]),
         exit(parent_died);
@@ -67,6 +74,12 @@ loop(Parent, Channels) ->
   end.
 
 %% Magic
+lookup(Channel, Channels) ->
+    case lists:keyfind(Channel, 1, Channels) of
+        {_, Pid} -> {ok, Pid};
+        false    -> {error, unregistered}
+    end.
+
 acquire(Channel, Channels) ->
     case lists:keyfind(Channel, 1, Channels) of
         {_, Pid} ->

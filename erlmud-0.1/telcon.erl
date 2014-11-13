@@ -184,6 +184,9 @@ topline(Bin) ->
 stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
 
 %% Controller actions
+who(State, _) ->
+    {"Not yet implemented.", State}.
+
 echo(String) -> String.
 
 bargle() -> "Arglebargle, glop-glyph!?!".
@@ -196,9 +199,10 @@ quit(Talker, Handle) ->
 sys(State = {Talker, Handle, _, Channels}, Line) ->
     {Keyword, String} = head(Line),
     case Keyword of
-        "list"  -> {list(Channels), State};
+        "chan"  -> {chan(String, Channels), State};
         "join"  -> join(State, String);
         "leave" -> leave(State, String);
+        "who"   -> who(State, String);
         "echo"  -> {echo(Line), State};
         "quit"  -> quit(Talker, Handle);
         _       -> {bargle(), State}
@@ -213,23 +217,44 @@ help({_, _, Actions}) ->
     Sys ++ A.
 
 %% Chat
-chanhead(String) ->
-    {Word, Line} = head(String),
-    Channel = case Word of
-        [$#|_] -> Word;
-        _      -> [$#|Word]
-    end,
-    {Channel, Line}.
+chan(Line, Channels) ->
+    {Keyword, _String} = head(Line),
+    case Keyword of
+        ""      -> show(Channels);
+        Channel -> exam(Channel)
+    end.
 
-list(Channels) ->
+show(Channels) ->
     List = chanman:list(),
     Mine = [Name || {Name, _, _} <- Channels],
     NotMine = lists:subtract(List, Mine),
-    Message = "  Channels joined:\r\n" ++
-        string:join(Mine, "\r\n") ++
-        "\r\n  Available channels:\r\n" ++
-        string:join(NotMine, "\r\n"),
+    DisplayList =
+        fun(Z) ->
+            Count = length(Z),
+            if
+                Count >  0 -> string:join(Z, "\r\n    ");
+                Count =< 0 -> "[None]"
+            end
+        end,
+    Message = "Channels joined:\r\n    " ++
+        DisplayList(Mine) ++
+        "\r\nAvailable channels:\r\n    " ++
+        DisplayList(NotMine),
     Message.
+
+exam(Channel) ->
+    case chanman:get_pid(Channel) of
+        {ok, ChanPid} ->
+            Handles = channel:handles(ChanPid),
+            Count = length(Handles),
+            Message = 
+                Channel ++ ": " ++
+                integer_to_list(Count) ++ "\r\n    " ++
+                string:join(Handles, "\r\n    "),
+            Message;
+        {error, _}    ->
+            "Channel " ++ Channel ++ " does not exist."
+    end.
 
 join(State, []) -> {bargle(), State};
 join(State = {Talker, Handle, Minion, Channels}, String) ->
@@ -272,6 +297,14 @@ chat(Channels, Line) ->
             none
     end.
 
+chanhead(String) ->
+    {Word, Line} = head(String),
+    Channel = case Word of
+        [$#|_] -> Word;
+        _      -> [$#|Word]
+    end,
+    {Channel, Line}.
+
 %% Magic
 prompt(Handle) -> Handle ++ " $ ".
 
@@ -292,7 +325,8 @@ sys_help() ->
     "  where Command is:\r\n"
     "    join Channel\r\n"
     "    leave Channel\r\n"
-    "    list\r\n"
+    "    chan\r\n"
+    "    chan Channel\r\n"
     "    echo Text\r\n"
     "    quit\r\n"
     "\r\n"

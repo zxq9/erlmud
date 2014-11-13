@@ -1,5 +1,10 @@
 -module(channel).
--export([start/2, start_link/2, code_change/1]).
+-export([start/2, start_link/2, code_change/1,
+         handles/1]).
+
+%% Interface
+handles(ChanPid) ->
+    em_lib:call(ChanPid, handles).
 
 %% Startup
 start(Parent, Conf)         -> starter(fun spawn/1, Parent, Conf).
@@ -24,6 +29,10 @@ loop(State = {Parent, Channel, Roster, Banned}) ->
         NewRoster = remove(Pid, Roster),
         note("Removed ~p from ~p", [Pid, Roster]),
         loop({Parent, Channel, NewRoster, Banned});
+    {From, Ref, handles} ->
+        Handles = get_handles(Roster),
+        From ! {Ref, Handles},
+        loop(State);
     Message = {'DOWN', _, process, _, _} ->
         NewState = handle_down(State, Message),
         loop(NewState);
@@ -84,6 +93,9 @@ handle_down(State = {Parent, Channel, Roster, Banned},
             NewRoster = remove(Pid, Roster),
             {Parent, Channel, NewRoster, Banned}
     end.
+
+get_handles(Roster) ->
+    [Handle || {_, Handle, _, _} <- Roster].
 
 %% Code changer
 code_change(State) ->
