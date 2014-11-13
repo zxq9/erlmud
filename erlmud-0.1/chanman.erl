@@ -1,5 +1,17 @@
 -module(chanman).
--export([start/1, start/2, start_link/1, start_link/2, code_change/2]).
+-export([start/1, start/2, start_link/1, start_link/2, code_change/2,
+         list/0, acquire/1]).
+
+%% Interface
+
+list() ->
+    call(list).
+
+acquire(Channel) ->
+    call({acquire, Channel}).
+
+call(Request) ->
+    em_lib:call(?MODULE, Request).
 
 %% Startup
 start(Parent)            -> start(Parent, none).

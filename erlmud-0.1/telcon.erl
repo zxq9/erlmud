@@ -10,7 +10,7 @@ welcome(Talker) ->
     Greeting = greet(),
     Talker ! {send, Greeting},
     Handle = receive {received, Bin} -> topline(Bin) end,
-    case check(Handle) of
+    case accman:check(Handle) of
         unregistered   -> register_acc(Talker, Handle);
         registered     -> authenticate(Talker, Handle);
         {fail, Reason} ->
@@ -26,7 +26,7 @@ register_acc(Talker, Handle) ->
     P2 = receive {received, P2Bin} -> topline(P2Bin) end,
     case string:equal(P1, P2) of
         true  ->
-            case create_acc(Handle, P1) of
+            case accman:create(Handle, P1) of
                 ok  ->
                     M = "\r\nWelcome to ErlMUD, " ++ Handle ++ "!\r\n" ++
                         "Enjoy your stay, and don't feed the trolls.\r\n" ++ prompt(Handle),
@@ -50,7 +50,7 @@ register_acc(Talker, Handle) ->
 authenticate(Talker, Handle) ->
     Talker ! {send, "Passphrase: "},
     PW = receive {received, Bin} -> topline(Bin) end,
-    case verify(Handle, PW) of
+    case accman:verify(Handle, PW) of
         verified ->
             Salutation = "Welcome back, " ++ Handle ++ "!\r\n" ++ prompt(Handle),
             Talker ! {send, Salutation},
@@ -221,7 +221,7 @@ chanhead(String) ->
     {Channel, Line}.
 
 list(Channels) ->
-    List = em_lib:call(chanman, list),
+    List = chanman:list(),
     Mine = [Name || {Name, _, _} <- Channels],
     NotMine = lists:subtract(List, Mine),
     Message = "  Channels joined:\r\n" ++
@@ -238,7 +238,7 @@ join(State = {Talker, Handle, Minion, Channels}, String) ->
             Response = "Already in " ++ Channel,
             {Response, State};
         false ->
-            ChanPid = em_lib:call(chanman, acquire, Channel),
+            ChanPid = chanman:acquire(Channel),
             ChanMon = monitor(process, ChanPid),
             ChanPid ! {join, {Handle, self()}},
             NewChannels = [{Channel, ChanPid, ChanMon} | Channels],
@@ -310,16 +310,6 @@ acquire_minion(Pid) ->
     Ref = monitor(process, Pid),
     Actions = init_actions(Pid),
     {Pid, Ref, Actions}.
-
-%% Accman interactions
-check(Handle) ->
-    em_lib:call(accman, check, Handle).
-
-verify(Handle, PW) ->
-    em_lib:call(accman, verify, {Handle, PW}).
-
-create_acc(Handle, PW) ->
-    em_lib:call(accman, create, {Handle, PW}).
 
 %% Handler
 handle_down(State = {Talker, Handle, Minion, Channels},

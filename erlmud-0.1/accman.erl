@@ -1,5 +1,20 @@
 -module(accman).
--export([start/1, start/2, start_link/1, start_link/2, code_change/2]).
+-export([start/1, start/2, start_link/1, start_link/2, code_change/2,
+         check/1, verify/2, create/2]).
+
+%% Interface
+
+check(Handle) ->
+    call({check, Handle}).
+
+verify(Handle, PW) ->
+    call({verify, {Handle, PW}}).
+
+create(Handle, PW) ->
+    call({create, {Handle, PW}}).
+
+call(Request) ->
+    em_lib:call(?MODULE, Request).
 
 %% Startup
 start(Parent)            -> start(Parent, []).
@@ -32,15 +47,15 @@ init_registry(_) -> orddict:new().
 loop(Parent, Registry) ->
   receive
     {From, Ref, {check, Handle}} ->
-        Status = check(Handle, Registry),
+        Status = do_check(Handle, Registry),
         From ! {Ref, Status},
         loop(Parent, Registry);
     {From, Ref, {verify, Acc}} ->
-        Response = verify(Acc, Registry),
+        Response = do_verify(Acc, Registry),
         From ! {Ref, Response},
         loop(Parent, Registry);
     {From, Ref, {create, Acc}} ->
-        case create(Acc, Registry) of
+        case do_create(Acc, Registry) of
             Error = {error, _} ->
                 From ! {Ref, Error},
                 loop(Parent, Registry);
@@ -62,20 +77,20 @@ loop(Parent, Registry) ->
   end.
 
 %% Magic
-check(Handle, Registry) ->
+do_check(Handle, Registry) ->
     case orddict:is_key(Handle, Registry) of
         true  -> registered;
         false -> unregistered
     end.
 
-create({Handle, PW}, Registry) ->
-    case check(Handle, Registry) of
+do_create({Handle, PW}, Registry) ->
+    case do_check(Handle, Registry) of
         unregistered -> orddict:store(Handle, PW, Registry);
         registered   -> {error, handle_in_use}
     end.
 
-verify({Handle, PW}, Registry) ->
-    case check(Handle, Registry) of
+do_verify({Handle, PW}, Registry) ->
+    case do_check(Handle, Registry) of
         registered   ->
             case string:equal(orddict:fetch(Handle, Registry), PW) of
                 true  -> verified;
