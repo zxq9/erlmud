@@ -85,13 +85,13 @@ con_pids(Roster) -> [Pid || {Pid, _, _, _} <- Roster].
 handle_down(State = {Parent, Channel, Roster, Banned},
             Message = {_, Ref, _, _, _}) ->
     case lists:keyfind(Ref, 3, Roster) of
-        false ->
-            note("Received ~p", [Message]),
-            State;
         User = {Pid, _, _, _} ->
             note("~p ~p sent 'DOWN'", [Channel, User]),
             NewRoster = remove(Pid, Roster),
-            {Parent, Channel, NewRoster, Banned}
+            {Parent, Channel, NewRoster, Banned};
+        false ->
+            note("Received ~p", [Message]),
+            State
     end.
 
 get_handles(Roster) ->

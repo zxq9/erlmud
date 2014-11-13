@@ -276,25 +276,25 @@ leave(State, []) -> {bargle(), State};
 leave(State = {Talker, Handle, Minion, Channels}, String) ->
     {Channel, _} = chanhead(String),
     case lists:keyfind(Channel, 1, Channels) of
-        false ->
-            Response = "You're not in " ++ Channel,
-            {Response, State};
         Chan = {Channel, ChanPid, ChanMon} ->
             NewChannels = lists:delete(Chan, Channels),
             demonitor(ChanMon),
             ChanPid ! {leave, self()},
             NewState = {Talker, Handle, Minion, NewChannels},
-            {ok, NewState}
+            {ok, NewState};
+        false ->
+            Response = "You're not in " ++ Channel,
+            {Response, State}
     end.
 
 chat(Channels, Line) ->
     {Channel, Message} = chanhead(Line),
     case lists:keyfind(Channel, 1, Channels) of
-        false ->
-            "You aren't in " ++ Channel;
         {_, Pid, _}   ->
             Pid ! {chat, {self(), Message}},
-            none
+            none;
+        false ->
+            "You aren't in " ++ Channel
     end.
 
 chanhead(String) ->
@@ -346,14 +346,14 @@ acquire_minion(Pid) ->
 handle_down(State = {Talker, Handle, Minion, Channels},
             Message = {'DOWN', Ref, process, _, _}) ->
     case lists:keyfind(Ref, 3, Channels) of
-        false ->
-            note("Received ~p", [Message]),
-            State;
         Chan = {Channel, _, _} ->
             Notice = "CHAT: Channel " ++ Channel ++ " closed.",
             unprompted(Notice, State),
             NewChannels = lists:delete(Chan, Channels),
-            {Talker, Handle, Minion, NewChannels}
+            {Talker, Handle, Minion, NewChannels};
+        false ->
+            note("Received ~p", [Message]),
+            State
     end.
 
 %% Code changer

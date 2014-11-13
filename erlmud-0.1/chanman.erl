@@ -93,12 +93,12 @@ acquire(Channel, Channels) ->
 
 handle_exit(Channels, Message = {_, Pid, _}) ->
     case lists:keyfind(Pid, 2, Channels) of
+        Channel = {_, _} ->
+            note("~p sent 'DOWN'", [Channel]),
+            lists:delete(Channel, Channels);
         false ->
             note("Received ~p", [Message]),
-            Channels;
-        Channel ->
-            note("~p sent 'DOWN'", [Channel]),
-            lists:delete(Channel, Channels)
+            Channels
     end.
 
 %% Code changer
