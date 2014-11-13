@@ -211,8 +211,8 @@ sys(State = {Talker, Handle, _, Channels}, Line) ->
 help({_, _, Actions}) ->
     Sys = sys_help(),
     A = case dict:to_list(Actions) of
-        []        -> "none (no minion currently under control)";
-        Available -> [String ++ "\r\n" || {String, _} <- Available]
+        []        -> "    none (no minion currently under control)";
+        Available -> "    " ++ string:join([String || {String, _} <- Available], "\r\n    ")
     end,
     Sys ++ A.
 
@@ -236,9 +236,9 @@ show(Channels) ->
                 Count =< 0 -> "[None]"
             end
         end,
-    Message = "Channels joined:\r\n    " ++
+    Message = "  Channels joined:\r\n    " ++
         DisplayList(Mine) ++
-        "\r\nAvailable channels:\r\n    " ++
+        "\r\n  Available channels:\r\n    " ++
         DisplayList(NotMine),
     Message.
 
@@ -318,27 +318,23 @@ greet() ->
     "$ ".
 
 sys_help() ->
-    "Available commands:\r\n"
-    "------------------------------------------------------------------------\r\n"
-    "chat Channel Text\r\n"
-    "sys Command [Args]\r\n"
-    "  where Command is:\r\n"
-    "    join Channel\r\n"
-    "    leave Channel\r\n"
-    "    chan\r\n"
-    "    chan Channel\r\n"
-    "    echo Text\r\n"
-    "    quit\r\n"
+    "  Available commands:\r\n"
+    "    chat Channel Text\r\n"
+    "    sys Command [Args]\r\n"
+    "      where Command is:\r\n"
+    "        join Channel\r\n"
+    "        leave Channel\r\n"
+    "        chan\r\n"
+    "        chan Channel\r\n"
+    "        echo Text\r\n"
+    "        quit\r\n"
     "\r\n"
-    "Shortcuts:\r\n"
-    "------------------------------------------------------------------------\r\n"
-    "#Channel Text        OR   chat Channel Text\r\n"
-    "\\Command [Args]      OR   sys Command [Args]\r\n"
-    "?                    OR   help\r\n"
+    "  Shortcuts:\r\n"
+    "    #Channel Text        OR   chat Channel Text\r\n"
+    "    \\Command [Args]      OR   sys Command [Args]\r\n"
+    "    ?                    OR   help\r\n"
     "\r\n"
-    "\r\n"
-    "Available Actions:\r\n"
-    "------------------------------------------------------------------------\r\n".
+    "  Available Actions:\r\n".
 
 %% Minion interactions
 acquire_minion(Pid) ->
