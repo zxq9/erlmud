@@ -163,7 +163,8 @@ rewrite(Line = [H|T]) ->
     end.
 
 head(Line) ->
-    {Head, Tail} = head([], Line),
+    Stripped = string:strip(Line),
+    {Head, Tail} = head([], Stripped),
     {lists:reverse(Head), Tail}.
 
 head(Word, []) ->
