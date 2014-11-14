@@ -21,13 +21,9 @@ welcome(Talker) ->
 
 register_acc(Talker, Handle) ->
     Talker ! {send, "\r\nLooks like you're new here.\r\nEnter a passphrase: "},
-    PassHash =
-        receive {received, P1Bin} ->
-            accman:salthash(topbin(P1Bin)) end,
+    PassHash = receive {received, P1Bin} -> accman:salthash(topbin(P1Bin)) end,
     Talker ! {send, "Re-enter to confirm: "},
-    Check =
-        receive {received, P2Bin} ->
-            accman:checkhash(PassHash, topbin(P2Bin)) end,
+    Check = receive {received, P2Bin} -> accman:checkhash(PassHash, topbin(P2Bin)) end,
     case Check of
         true  ->
             case accman:create(Handle, PassHash) of
