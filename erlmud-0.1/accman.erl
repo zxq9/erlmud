@@ -14,7 +14,7 @@ salthash(Salt, Bin) ->
     {Salt, Hash}.
 
 checkhash({Salt, Hash}, Bin) ->
-    Test = hash(<<Salt/binary, Bin/binary>>),
+    {_, Test} = salthash(Salt, Bin),
     Test =:= Hash.
 
 check(Handle) ->
