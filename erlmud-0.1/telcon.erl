@@ -29,7 +29,8 @@ register_acc(Talker, Handle) ->
             case accman:create(Handle, PassHash) of
                 ok  ->
                     M = "\r\nWelcome to ErlMUD, " ++ Handle ++ "!\r\n" ++
-                        "Enjoy your stay, and don't feed the trolls.\r\n" ++ prompt(Handle),
+                        "Enjoy your stay, and don't feed the trolls.\r\n" ++
+                        Handle ++ " $ ",
                     Talker ! {send, M},
                     init(Talker, Handle);
                 {error, handle_is_in_use} -> 
@@ -52,7 +53,7 @@ authenticate(Talker, Handle) ->
     PW = receive {received, Bin} -> topbin(Bin) end,
     case accman:verify(Handle, PW) of
         verified ->
-            Salutation = "Welcome back, " ++ Handle ++ "!\r\n" ++ prompt(Handle),
+            Salutation = "Welcome back, " ++ Handle ++ "!\r\n" ++ Handle ++ " $ ",
             Talker ! {send, Salutation},
             init(Talker, Handle);
         badpass ->
@@ -65,22 +66,16 @@ authenticate(Talker, Handle) ->
     end.
 
 init(Talker, Handle) ->
-    Actions = init_actions(none),
-    Minion = {none, none, Actions},
-    Channels = init_channels(Handle),
+    Minion = {none, none, init_actions(none)},
+    Channels = [],
     State = {Talker, Handle, Minion, Channels},
     loop(State).
 
-init_channels(_) -> [].
-
-init_actions(Minion) ->
-    case Minion of
-        none  -> dict:new();
-        Pid   -> em_lib:call(Pid, get_actions)
-    end.
+init_actions(none) -> dict:new();
+init_actions(MPid) -> em_lib:call(MPid, get_actions).
 
 %% Service
-loop(State = {Talker, Handle, Minion = {MPid, MRef, _Actions}, Channels}) ->
+loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
   receive
     {received, Bin} ->
         NewState = evaluate(Bin, State),
@@ -91,9 +86,6 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, _Actions}, Channels}) ->
     {notice, Message} ->
         unprompted(Message, State),
         loop(State);
-    {acquire_minion, Pid} ->
-        NewMinion = acquire_minion(Pid),
-        loop({Talker, Handle, NewMinion, Channels});
     {'DOWN', MRef, process, MPid, _Reason} ->
         unprompted("Minion disconnected.", State),
         Actions = init_actions(none),
@@ -115,14 +107,14 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, _Actions}, Channels}) ->
   end.
 
 %% Input evaluation
-evaluate(Bin, State = {Talker, Handle, _, _}) ->
+evaluate(Bin, State = {Talker, _, _, _}) ->
     Line = topline(Bin),
     Expansion = rewrite(Line),
     {Response, NewState} = interpret(Expansion, State),
     Reply = case Response of
-        none -> prompt(Handle);
-        ok   -> "ok" ++ "\r\n" ++ prompt(Handle);
-        Any  -> Any ++ "\r\n" ++ prompt(Handle)
+        none -> prompt(State);
+        ok   -> "ok" ++ "\r\n" ++ prompt(State);
+        Any  -> Any ++ "\r\n" ++ prompt(State)
     end,
     Talker ! {send, Reply},
     NewState.
@@ -184,8 +176,18 @@ topline(Bin) -> binary_to_list(topbin(Bin)).
 %stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
 
 %% Controller actions
-who(State, _) ->
-    {"Not yet implemented.", State}.
+sys(State = {Talker, Handle, _, _}, Line) ->
+    {Keyword, String} = head(Line),
+    case Keyword of
+        "chan"  -> chan(State, String);
+        "char"  -> char(State, String);
+        "who"   -> who(State, String);
+        "echo"  -> {echo(Line), State};
+        "quit"  -> quit(Talker, Handle);
+        _       -> {bargle(), State}
+    end.
+
+who(State, _) -> {"Not yet implemented.", State}.
 
 echo(String) -> String.
 
@@ -196,18 +198,6 @@ quit(Talker, Handle) ->
     Talker ! {send, Message},
     exit(quit).
 
-sys(State = {Talker, Handle, _, Channels}, Line) ->
-    {Keyword, String} = head(Line),
-    case Keyword of
-        "chan"  -> {chan(String, Channels), State};
-        "join"  -> join(State, String);
-        "leave" -> leave(State, String);
-        "who"   -> who(State, String);
-        "echo"  -> {echo(Line), State};
-        "quit"  -> quit(Talker, Handle);
-        _       -> {bargle(), State}
-    end.
-
 help({_, _, Actions}) ->
     Sys = sys_help(),
     A = case dict:to_list(Actions) of
@@ -217,11 +207,14 @@ help({_, _, Actions}) ->
     Sys ++ "    " ++ A.
 
 %% Chat
-chan(Line, Channels) ->
-    {Keyword, _String} = head(Line),
+chan(State = {_, _, _, Channels}, Line) ->
+    {Keyword, String} = head(Line),
     case Keyword of
-        ""      -> show(Channels);
-        Channel -> exam(Channel)
+        ""      -> {show(Channels), State};
+        "list"  -> {show(Channels), State};
+        "join"  -> join(State, String);
+        "leave" -> leave(State, String);
+        Channel -> {exam(Channel), State}
     end.
 
 show(Channels) ->
@@ -306,11 +299,63 @@ chanhead(String) ->
     end,
     {Channel, Line}.
 
-%% Magic
-prompt(Handle) -> Handle ++ " $ ".
+%% Char system actions
+char(State, Line) ->
+    {Keyword, String} = head(Line),
+    case Keyword of
+        ""     -> charlist(State);
+        "list" -> charlist(State);
+        "load" -> charload(State, String);
+        "quit" -> charquit(State);
+        "make" -> charmake(State, String);
+        _      -> {bargle(), State}
+    end.
 
-unprompted(Data, {Talker, Handle, _, _}) ->
-    Message = "\r" ++ Data ++ "\r\n" ++ prompt(Handle),
+charlist(State = {_, Handle, _, _}) ->
+    Mobs = case charman:list(Handle) of
+        []   -> "[None]";
+        List -> string:join(List, "\r\n    ")
+    end,
+    Response = "  Your chars:\r\n    " ++ Mobs,
+    {Response, State}.
+
+charload(State = {_, Handle, {none, _, _}, _}, String) ->
+    {Name, _} = head(String),
+    getchar(State, charman:load(Handle, Name));
+charload(State, _) ->
+    {"You already control a character.", State}.
+
+getchar(State, Error = {error, _}) ->
+    note("Received ~p", [Error]),
+    {"Not available.", State};
+getchar({Talker, Handle, _, Channels}, CharPid) ->
+    CharRef = monitor(process, CharPid),
+    Actions = init_actions(CharPid),
+    Minion = {CharPid, CharRef, Actions},
+    {"Char loaded.", {Talker, Handle, Minion, Channels}}.
+
+charquit(State = {_, _, {none, _, _}, _}) ->
+    {"You don't have a char to unload.", State};
+charquit({Talker, Handle, {CharPid, CharRef, _}, Channels}) ->
+    demonitor(CharRef),
+    em_lib:call(CharPid, divorce),
+    Unloaded = {none, none, []},
+    {"You're such a quitter.", {Talker, Handle, Unloaded, Channels}}.
+
+charmake(State, []) -> {bargle(), State};
+charmake(State = {_, Handle, _, _}, String) ->
+    {Name, _} = head(String),
+    Char = solicit_chardata(State, Name),
+    {charman:make(Handle, Char), State}.
+
+solicit_chardata(_, Name) -> {Name, {char_details}}.
+
+%% Magic
+prompt({_, Handle, {none, _, _}, _}) -> Handle ++ " $ ";
+prompt({_, _, {MPid, _, _}, _})      -> em_lib:call(MPid, short_stat) ++ " $ ".
+
+unprompted(Data, State = {Talker, _, _, _}) ->
+    Message = "\r" ++ Data ++ "\r\n" ++ prompt(State),
     Talker ! {send, Message}.
 
 greet() ->
@@ -320,28 +365,34 @@ greet() ->
 
 sys_help() ->
     "  Available commands:\r\n"
-    "    chat Channel Text\r\n"
-    "    sys Command [Args]\r\n"
-    "      where Command is:\r\n"
-    "        join Channel\r\n"
-    "        leave Channel\r\n"
-    "        chan\r\n"
-    "        chan Channel\r\n"
-    "        echo Text\r\n"
-    "        quit\r\n"
+    "    chat Channel Text      - Send Text to everyone in Channel\r\n"
+    "    sys Command [Args]     - Execute system Command\r\n"
+    "    help                   - Display this message\r\n"
+    "  Command is one of:\r\n"
+    "    char [Args]            - Invoke character commands\r\n"
+    "    chan [Args]            - Invoke channel commands\r\n"
+    "    echo Text              - Echo Text back to your terminal\r\n"
+    "    quit                   - Disconnect abruptly\r\n"
+    "\r\n"
+    "  Character commands:\r\n"
+    "    list OR (nothing)      - List your characters\r\n"
+    "    CharacterName          - Display character status\r\n"
+    "    load Name              - Take control of character\r\n"
+    "    quit                   - Release control of current chatacter\r\n"
+    "    make Name              - Create a new character\r\n"
+    "\r\n"
+    "  Channel commands:\r\n"
+    "    list OR (nothing)      - List system chat channels\r\n"
+    "    ChannelName            - Display user count and handle list of ChannelName\r\n"
+    "    join Channel           - Join or create the named Channel\r\n"
+    "    leave Channel          - Leave the named Channel (and close if last member)\r\n"
     "\r\n"
     "  Shortcuts:\r\n"
-    "    #Channel Text        OR   chat Channel Text\r\n"
-    "    \\Command [Args]      OR   sys Command [Args]\r\n"
-    "    ?                    OR   help\r\n"
+    "    #Channel Text      OR   chat Channel Text\r\n"
+    "    \\Command [Args]    OR   sys Command [Args]\r\n"
+    "    ?                  OR   help\r\n"
     "\r\n"
     "  Available Actions:\r\n".
-
-%% Minion interactions
-acquire_minion(Pid) ->
-    Ref = monitor(process, Pid),
-    Actions = init_actions(Pid),
-    {Pid, Ref, Actions}.
 
 %% Handler
 handle_down(State = {Talker, Handle, Minion, Channels},

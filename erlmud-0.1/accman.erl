@@ -17,8 +17,7 @@ checkhash({Salt, Hash}, Bin) ->
     {_, Test} = salthash(Salt, Bin),
     Test =:= Hash.
 
-check(Handle) ->
-    call({check, Handle}).
+check(Handle) -> call({check, Handle}).
 
 verify(Handle, PW) ->
     case call({get_hash, Handle}) of
@@ -31,11 +30,9 @@ verify(Handle, PW) ->
             Error
     end.
 
-create(Handle, PassHash) ->
-    call({create, {Handle, PassHash}}).
+create(Handle, PassHash) -> call({create, {Handle, PassHash}}).
 
-call(Request) ->
-    em_lib:call(?MODULE, Request).
+call(Request) -> em_lib:call(?MODULE, Request).
 
 %% Startup
 start(Parent)            -> start(Parent, []).

@@ -1,5 +1,5 @@
 -module(mobman).
--export([start/1, start/2, start_link/1, start_link/2, code_change/2]).
+-export([start/1, start/2, start_link/1, start_link/2, code_change/1]).
 
 %% Startup
 start(Parent)            -> start(Parent, []).
@@ -20,25 +20,30 @@ starter(Spawn, Parent, Conf) ->
 
 init(Parent, Conf) ->
     note("Notional initialization with ~p.", [Conf]),
-    loop(Parent, Conf).
+    Defs = load_definitions(),
+    loop({Parent, Conf, Defs}).
+
+load_definitions() -> [].
 
 %% Service
-loop(Parent, Conf) ->
+loop(State = {Parent, _, _}) ->
   receive
+    {'EXIT', Parent, Reason} ->
+        note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]);
     code_change ->
-        ?MODULE:code_change(Parent, Conf);
+        ?MODULE:code_change(State);
     shutdown ->
         note("Shutting down."),
         exit(shutdown);
     Any ->
         note("Received ~tp", [Any]),
-        loop(Parent, Conf)
+        loop(State)
   end.
 
 %% Code changer
-code_change(Parent, Conf) ->
+code_change(State) ->
     note("Changing code."),
-    loop(Parent, Conf).
+    loop(State).
 
 %% System
 note(String) ->

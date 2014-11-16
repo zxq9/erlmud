@@ -1,6 +1,7 @@
 -module(erlmud).
 -export([start/0, code_change/2]).
 
+%% Startup
 start() ->
     true = register(erlmud, spawn(fun() -> init() end)).
 
@@ -8,6 +9,7 @@ init() ->
     process_flag(trap_exit, true),
     note("Starting up."),
     Services = [{chanman, start_link, []},
+                {charman, start_link, []},
                 {accman, start_link, []},
                 {wayman, start_link, []},
                 {locman, start_link, []},
