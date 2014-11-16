@@ -94,7 +94,7 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
         NewState = handle_down(State, Message),
         loop(NewState);
     status ->
-        note("Status:~n  Talker: ~p~n  Handle: ~p~n  Minion: ~p~n, Channels: ~p",
+        note("Status:~n  Talker: ~p~n  Handle: ~p~n  Minion: ~p~n Channels: ~p",
              [Talker, Handle, Minion, Channels]),
         loop(State);
     code_change ->
@@ -308,6 +308,7 @@ char(State, Line) ->
         "load" -> charload(State, String);
         "quit" -> charquit(State);
         "make" -> charmake(State, String);
+        "drop" -> chardrop(State, String);
         _      -> {bargle(), State}
     end.
 
@@ -349,6 +350,11 @@ charmake(State = {_, Handle, _, _}, String) ->
     {charman:make(Handle, Char), State}.
 
 solicit_chardata(_, Name) -> {Name, {char_details}}.
+
+chardrop(State, []) -> {bargle(), State};
+chardrop(State = {_, Handle, _, _}, String) ->
+    {Name, _} = head(String),
+    {charman:drop(Handle, Name), State}.
 
 %% Magic
 prompt({_, Handle, {none, _, _}, _}) -> Handle ++ " $ ";

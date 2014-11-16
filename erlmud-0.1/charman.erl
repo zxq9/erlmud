@@ -1,6 +1,6 @@
 -module(charman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/1,
-         who/0, list/1, load/2, make/2]).
+         who/0, list/1, load/2, make/2, drop/2]).
 
 %% Interface
 who() -> {error, not_implemented}.
@@ -8,6 +8,8 @@ who() -> {error, not_implemented}.
 list(Acc) -> call({get_chars, Acc}).
 
 make(Acc, Char) -> call({make_char, {Acc, Char}}).
+
+drop(Acc, Name) -> call({drop_char, {Acc, Name}}).
 
 load(_Acc, _Name) -> {error, not_implemented}.
 
@@ -41,7 +43,7 @@ load_accounts() -> dict:new().
 load_characters() -> dict:new().
 
 %% Service
-loop(State = {Parent, _Conf, Accs, _Chars}) ->
+loop(State = {Parent, Conf, Accs, Chars}) ->
   receive
     {From, Ref, {get_chars, Acc}} ->
         Result = get_chars(Acc, Accs),
@@ -51,8 +53,16 @@ loop(State = {Parent, _Conf, Accs, _Chars}) ->
         {Result, NewState} = make_char(State, Acc, Char),
         From ! {Ref, Result},
         loop(NewState);
+    {From, Ref, {drop_char, {Acc, Name}}} ->
+        {Result, NewState} = drop_char(State, Acc, Name),
+        From ! {Ref, Result},
+        loop(NewState);
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]);
+    status ->
+        note("Status:~n  Conf: ~p~n  Accs: ~p~n  Chars: ~p~n",
+             [Conf, dict:to_list(Accs), dict:to_list(Chars)]),
+        loop(State);
     code_change ->
         ?MODULE:code_change(State);
     shutdown ->
@@ -73,12 +83,29 @@ get_chars(Acc, Accs) ->
 make_char(State = {Parent, Conf, Accs, Chars}, Acc, {Name, Data}) ->
     case dict:is_key(Name, Chars) of
         true  ->
-            Response = Name ++ " is already one of your characters.",
+            Response = Name ++ " already exists.",
             {Response, State};
         false ->
             NewAccs = dict:append(Acc, Name, Accs),
-            NewChars = dict:append(Name, Data, Chars),
+            NewChars = dict:store(Name, Data, Chars),
             {ok, {Parent, Conf, NewAccs, NewChars}}
+    end.
+
+drop_char(State = {Parent, Conf, Accs, Chars}, Acc, Name) ->
+    case dict:find(Acc, Accs) of
+        {ok, List} ->
+            case lists:member(Name, List) of
+                true  ->
+                    NewAccs = dict:store(Acc, lists:delete(Name, List), Accs),
+                    NewChars = dict:erase(Name, Chars),
+                    {ok, {Parent, Conf, NewAccs, NewChars}};
+                false ->
+                    Response = Name ++ " is not one of your characters.",
+                    {Response, State}
+            end;
+        false ->
+            Response = Name ++ " is not one of your characters.",
+            {Response, State}
     end.
 
 %% Code changer
