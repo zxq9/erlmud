@@ -71,8 +71,8 @@ init(Talker, Handle) ->
     State = {Talker, Handle, Minion, Channels},
     loop(State).
 
-init_actions(none) -> dict:new();
-init_actions(MPid) -> em_lib:call(MPid, get_actions).
+init_actions(none) -> [];
+init_actions(MobPid) -> mob:get_actions(MobPid).
 
 %% Service
 loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
@@ -129,20 +129,11 @@ interpret(Expansion, State = {_, _, Minion, Channels}) ->
         _       -> {perform(Keyword, Line, Minion), State}
     end.
 
-perform(Keyword, String, {Pid, _, Actions}) ->
-    case Pid of
-        none   ->
-            bargle();
-        Minion ->
-            case dict:find(Keyword, Actions) of
-                error ->
-                    bargle();
-                Verb  -> 
-                    Args  = string:tokenize(String),
-                    Minion ! {action, {Verb, Args}},
-                    ok
-            end
-    end.
+perform(_, _, {none, _, _}) ->
+    bargle();
+perform(Keyword, String, {MPid, _, _}) ->
+    MPid ! {action, {Keyword, String}},
+    none.
 
 %% Binary & string handling
 rewrite([]) -> [];
@@ -198,13 +189,12 @@ quit(Talker, Handle) ->
     Talker ! {send, Message},
     exit(quit).
 
+help({_, _, []}) ->
+    sys_help() ++ "    none (no minion currently under control)";
 help({_, _, Actions}) ->
     Sys = sys_help(),
-    A = case dict:to_list(Actions) of
-        []        -> "none (no minion currently under control)";
-        Available -> string:join([String || {String, _} <- Available], "\r\n    ")
-    end,
-    Sys ++ "    " ++ A.
+    A = string:join([Name ++ "   - " ++ Desc || {Name, Desc} <- Actions], "\r\n    "),
+    string:join([Sys, A], "    ").
 
 %% Chat
 chan(State = {_, _, _, Channels}, Line) ->
@@ -326,14 +316,16 @@ charload(State = {_, Handle, {none, _, _}, _}, String) ->
 charload(State, _) ->
     {"You already control a character.", State}.
 
-getchar(State, Error = {error, _}) ->
-    note("Received ~p", [Error]),
-    {"Not available.", State};
-getchar({Talker, Handle, _, Channels}, CharPid) ->
+getchar(State, {error, Response}) ->
+    {Response, State};
+getchar({Talker, Handle, _, Channels}, {ok, CharData}) ->
+    CharPid = mobman:spawn_minion(CharData),
     CharRef = monitor(process, CharPid),
     Actions = init_actions(CharPid),
     Minion = {CharPid, CharRef, Actions},
-    {"Char loaded.", {Talker, Handle, Minion, Channels}}.
+    NewState = {Talker, Handle, Minion, Channels},
+    Message = io_lib:format("Received chardata ~p.", [CharData]),
+    {Message, NewState}.
 
 charquit(State = {_, _, {none, _, _}, _}) ->
     {"You don't have a char to unload.", State};
@@ -349,7 +341,7 @@ charmake(State = {_, Handle, _, _}, String) ->
     Char = solicit_chardata(State, Name),
     {charman:make(Handle, Char), State}.
 
-solicit_chardata(_, Name) -> {Name, {char_details}}.
+solicit_chardata(_, Name) -> {Name, {"mob", "Some description.", {0,0,0}}}.
 
 chardrop(State, []) -> {bargle(), State};
 chardrop(State = {_, Handle, _, _}, String) ->
@@ -361,7 +353,10 @@ prompt({_, Handle, {none, _, _}, _}) -> Handle ++ " $ ";
 prompt({_, _, {MPid, _, _}, _})      -> em_lib:call(MPid, short_stat) ++ " $ ".
 
 unprompted(Data, State = {Talker, _, _, _}) ->
-    Message = "\r" ++ Data ++ "\r\n" ++ prompt(State),
+    % TODO: Find a better way to clear the current line...
+    Message =
+        "\r                                          \r" ++
+        Data ++ "\r\n" ++ prompt(State),
     Talker ! {send, Message}.
 
 greet() ->

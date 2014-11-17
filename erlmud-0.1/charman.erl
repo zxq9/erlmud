@@ -1,17 +1,15 @@
 -module(charman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/1,
-         who/0, list/1, load/2, make/2, drop/2]).
+         list/1, load/2, make/2, drop/2]).
 
 %% Interface
-who() -> {error, not_implemented}.
-
 list(Acc) -> call({get_chars, Acc}).
+
+load(Acc, Name) -> call({load_char, {Acc, Name}}).
 
 make(Acc, Char) -> call({make_char, {Acc, Char}}).
 
 drop(Acc, Name) -> call({drop_char, {Acc, Name}}).
-
-load(_Acc, _Name) -> {error, not_implemented}.
 
 call(Request) -> em_lib:call(?MODULE, Request).
 
@@ -49,6 +47,10 @@ loop(State = {Parent, Conf, Accs, Chars}) ->
         Result = get_chars(Acc, Accs),
         From ! {Ref, Result},
         loop(State);
+    {From, Ref, {load_char, {Acc, Name}}} ->
+        Result = load_char(Accs, Chars, Acc, Name),
+        From ! {Ref, Result},
+        loop(State);
     {From, Ref, {make_char, {Acc, Char}}} ->
         {Result, NewState} = make_char(State, Acc, Char),
         From ! {Ref, Result},
@@ -80,6 +82,16 @@ get_chars(Acc, Accs) ->
         error        -> []
     end.
 
+load_char(Accs, Chars, Acc, Name) ->
+    case dict:find(Acc, Accs) of
+        {ok, List} ->
+            case lists:member(Name, List) of
+                true  -> {ok, {Name, dict:fetch(Name, Chars)}};
+                false -> {error, Name ++ " is not one of your characters."}
+            end;
+        false -> {error, Name ++ " is not one of your characters."}
+    end.
+
 make_char(State = {Parent, Conf, Accs, Chars}, Acc, {Name, Data}) ->
     case dict:is_key(Name, Chars) of
         true  ->
@@ -95,7 +107,7 @@ drop_char(State = {Parent, Conf, Accs, Chars}, Acc, Name) ->
     case dict:find(Acc, Accs) of
         {ok, List} ->
             case lists:member(Name, List) of
-                true  ->
+                true ->
                     NewAccs = dict:store(Acc, lists:delete(Name, List), Accs),
                     NewChars = dict:erase(Name, Chars),
                     {ok, {Parent, Conf, NewAccs, NewChars}};

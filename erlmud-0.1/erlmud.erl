@@ -12,9 +12,12 @@ init() ->
                 {charman, start_link, []},
                 {accman, start_link, []},
                 {wayman, start_link, []},
-                {locman, start_link, []},
+                {locman, start_link, [{{0,0,0},
+                                       {"Town Square",
+                                        "A desolate, featureless town square, "
+                                        "typical of game prototypes."}}]},
                 {objman, start_link, []},
-                {mobman, start_link, []},
+                {mobman, start_link, [{"mob", mob}]},
                 {netman, start_link, [{telnet, start_link, [2222]}]}],
     {ok, Running} = init(Services, []),
     loop(Running, Services).
