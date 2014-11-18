@@ -86,6 +86,14 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
     {notice, Message} ->
         unprompted(Message, State),
         loop(State);
+    {look, loc, View} ->
+        Message = see_loc(View),
+        unprompted(Message, State),
+        loop(State);
+    {look, target, View} ->
+        Message = see_target(View),
+        unprompted(Message, State),
+        loop(State);
     {'DOWN', MRef, process, MPid, _Reason} ->
         unprompted("Minion disconnected.", State),
         Actions = init_actions(none),
@@ -112,9 +120,9 @@ evaluate(Bin, State = {Talker, _, _, _}) ->
     Expansion = rewrite(Line),
     {Response, NewState} = interpret(Expansion, State),
     Reply = case Response of
-        none -> prompt(State);
-        ok   -> "ok" ++ "\r\n" ++ prompt(State);
-        Any  -> Any ++ "\r\n" ++ prompt(State)
+        none -> prompt(NewState);
+        ok   -> "ok" ++ "\r\n" ++ prompt(NewState);
+        Any  -> Any ++ "\r\n" ++ prompt(NewState)
     end,
     Talker ! {send, Reply},
     NewState.
@@ -134,6 +142,12 @@ perform(_, _, {none, _, _}) ->
 perform(Keyword, String, {MPid, _, _}) ->
     MPid ! {action, {Keyword, String}},
     none.
+
+see_loc(View) ->
+    io_lib:format("You see ~p", [View]).
+
+see_target(View) ->
+    io_lib:format("You see ~p", [View]).
 
 %% Binary & string handling
 rewrite([]) -> [];
@@ -331,7 +345,7 @@ charquit(State = {_, _, {none, _, _}, _}) ->
     {"You don't have a char to unload.", State};
 charquit({Talker, Handle, {CharPid, CharRef, _}, Channels}) ->
     demonitor(CharRef),
-    em_lib:call(CharPid, divorce),
+    CharPid ! {self(), divorce},
     Unloaded = {none, none, []},
     {"You're such a quitter.", {Talker, Handle, Unloaded, Channels}}.
 

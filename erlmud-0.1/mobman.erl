@@ -27,19 +27,25 @@ starter(Spawn, Parent, Conf) ->
 init(Parent, IlkMods) ->
     process_flag(trap_exit, true),
     note("Notional initialization with ~p", [IlkMods]),
-    loop({Parent, IlkMods}).
+    Live = [],
+    Conf = [],
+    loop({Parent, IlkMods, Live, Conf}).
 
 %% Service
-loop(State = {Parent, IlkMods}) ->
+loop(State = {Parent, IlkMods, Live, Conf}) ->
   receive
     {Controller, Ref, {spawn_minion, MobData}} ->
-        MobPid = spawn_minion(Controller, MobData, IlkMods),
+        {MobPid, NewLive} = spawn_minion(Controller, MobData, IlkMods, Live),
         Controller ! {Ref, MobPid},
-        loop(State);
+        loop({Parent, IlkMods, NewLive, Conf});
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]);
+    Message = {'EXIT', _, _} ->
+        NewLive = handle_exit(Live, Message),
+        loop({Parent, IlkMods, NewLive, Conf});
     status ->
-        note("Status:~n  Parent: ~p~n  IlkMods: ~p", [Parent, IlkMods]),
+        note("Status:~n  Parent: ~p~n  IlkMods: ~p~n  Live: ~p~n  Conf: ~p",
+             [Parent, IlkMods, Live, Conf]),
         loop(State);
     code_change ->
         ?MODULE:code_change(State);
@@ -52,13 +58,27 @@ loop(State = {Parent, IlkMods}) ->
   end.
 
 %% Controller calls
-spawn_minion(Controller, MobData = {_, {Ilk, _, _}}, IlkMods) ->
+spawn_minion(Controller, MobData = {_, {Ilk, _, _}}, IlkMods, Live) ->
     Module = proplists:get_value(Ilk, IlkMods),
-    Module:start_link(Controller, MobData).
+    MobPid = Module:start_link(Controller, MobData),
+    NewLive = [{MobPid, Ilk} | Live],
+    {MobPid, NewLive}.
+
+%% Magic
+handle_exit(Live, Message = {_, Pid, _}) ->
+    case lists:keyfind(Pid, 1, Live) of
+        Mob = {_, _} ->
+            note("~p sent 'EXIT'", [Mob]),
+            lists:delete(Mob, Live);
+        false ->
+            note("Received ~p", [Message]),
+            Live
+    end.
 
 %% Code changer
-code_change(State) ->
+code_change(State = {_, _, Live, _}) ->
     note("Changing code."),
+    [MobPid ! code_change || {MobPid, _} <- Live],
     loop(State).
 
 %% System

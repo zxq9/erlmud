@@ -1,8 +1,12 @@
 -module(loc).
 -export([start_link/1, code_change/1,
-         mob_jump/2]).
+         look/1, look/2, mob_jump/2]).
 
 %% Interface
+look(LocPid) -> em_lib:call(LocPid, look).
+
+look(LocPid, Target) -> em_lib:call(LocPid, look, Target).
+
 mob_jump(LocPid, Mob) -> em_lib:call(LocPid, jump_in, Mob).
 
 %% Startup
@@ -24,6 +28,13 @@ loop(State = {Id, Name, Desc, Mobs, Objs}) ->
     {visible, Origin, Action} ->
         reflect(Origin, Action, State),
         loop(State);
+    {From, Ref, look} ->
+        From ! {Ref, {Name, Desc, Mobs, Objs}},
+        loop(State);
+    {From, Ref, {look, Target}} ->
+        View = look_at(Target, Mobs),
+        From ! {Ref, View},
+        loop(State);
     {From, Ref, {jump_in, Mob}} ->
         NewMobs = jump_in(Mob, Mobs),
         From ! {Ref, ok},
@@ -44,6 +55,12 @@ loop(State = {Id, Name, Desc, Mobs, Objs}) ->
   end.
 
 %% Request handlers
+look_at(Target, Mobs) ->
+    case lists:keyfind(Target, 1, Mobs) of
+        {Name, _, Desc} -> {mob, {Name, Desc}};
+        false           -> not_seen
+    end.
+
 jump_in(Mob = {_, Pid, _}, Mobs) ->
     note("Jumping in ~p", [Mob]),
     link(Pid),

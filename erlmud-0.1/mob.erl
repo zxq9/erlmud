@@ -32,6 +32,8 @@ loop(State = {Con = {ConPid, ConRef}, Name, Ilk, Desc, Loc}) ->
     {From, Ref, actions} ->
         From ! {Ref, actions()},
         loop(State);
+    {ConPid, divorce} ->
+        note("Controller cut ties. Retiring.");
     Message = {'DOWN', ConRef, process, ConPid, _} ->
         note("Controller died with ~p~n  ...I'm dead.", [Message]);
 %       NewState = spawn_controller(State),
@@ -58,6 +60,15 @@ evaluate("say", String, State = {{_, _}, Name, _, _, {_, LocPid}}) ->
     Sound = "says,\"" ++ String ++ "\"",
     LocPid ! {audible, Origin, Sound},
     State;
+evaluate("look", "", State = {{ConPid, _}, _, _, _, {_, LocPid}}) ->
+    View = loc:look(LocPid),
+    ConPid ! {look, loc, View},
+    State;
+evaluate("look", String, State = {{ConPid, _}, _, _, _, {_, LocPid}}) ->
+    {Target, _} = head(String),
+    View = loc:look(LocPid, Target),
+    ConPid ! {look, target, View},
+    State;
 evaluate(Keyword, String, State = {{ConPid, _}, Name, _, _, _}) ->
     Message = io_lib:format("~p received {~p,~p}", [Name, Keyword, String]),
     ConPid ! {notice, Message},
@@ -65,7 +76,22 @@ evaluate(Keyword, String, State = {{ConPid, _}, Name, _, _, _}) ->
 
 %% Magic
 actions() ->
-    [{"say", "Say something out loud."}].
+    [{"say", "Say something out loud."},
+     {"look", "View your surroundings."},
+     {"look Target", "Look at Target, if present."}].
+
+head(Line) ->
+    Stripped = string:strip(Line),
+    {Head, Tail} = head([], Stripped),
+    {lists:reverse(Head), Tail}.
+
+head(Word, []) ->
+    {Word, []};
+head(Word, [H|T]) ->
+    case H of
+        $\s -> {Word, T};
+        Z   -> head([Z|Word], T)
+    end.
 
 %% Code changer
 code_change(State) ->

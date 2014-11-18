@@ -30,7 +30,7 @@ init(Parent, Conf) ->
     Live = genesis(Conf),
     loop({Parent, Live, Conf}).
 
-genesis(Conf) -> dict:from_list([{Id, loc:start_link(Z)} || Z = {Id, _} <- Conf]).
+genesis(Conf) -> [{Id, loc:start_link(Z)} || Z = {Id, _} <- Conf].
 
 %% Service
 loop(State = {Parent, Live, Conf}) ->
@@ -41,6 +41,9 @@ loop(State = {Parent, Live, Conf}) ->
         loop(State);
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]);
+    Message = {'EXIT', _, _} ->
+        NewLive = handle_exit(Message, Live, Conf),
+        loop({Parent, NewLive, Conf});
     stats ->
         note("Status:~n  Live: ~p~n  Conf: ~p", [Live, Conf]),
         loop(State);
@@ -55,12 +58,30 @@ loop(State = {Parent, Live, Conf}) ->
   end.
 
 %% Request handlers
-get_pid(LocID, Live) -> dict:find(LocID, Live).
+get_pid(LocID, Live) ->
+    case lists:keyfind(LocID, 1, Live) of
+        {_, Pid} -> {ok, Pid};
+        false    -> error
+    end.
+
+%% Magic
+handle_exit(Message = {_, Pid, _}, Live, Conf) ->
+    case lists:keyfind(Pid, 2, Live) of
+        Loc = {LocID, _} ->
+            ScrubLive = lists:delete(Loc, Live),
+            case lists:keyfind(LocID, 1, Conf) of
+                LocConf = {_, _} -> [{LocID, loc:start_link(LocConf)} | ScrubLive];
+                false            -> ScrubLive
+            end;
+        false ->
+            note("Received ~p", [Message]),
+            Live
+    end.
 
 %% Code changer
 code_change(State = {_, Live, _}) ->
     note("Changing code."),
-    [LocID ! code_change || LocID <- dict:fetch_keys(Live)],
+    [LocPid ! code_change || {_, LocPid} <- Live],
     loop(State).
 
 %% System
