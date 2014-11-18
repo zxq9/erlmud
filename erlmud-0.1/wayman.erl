@@ -75,8 +75,8 @@ loop(State = {Parent, Live, Ways}) ->
 reg(Live, Way = {WayID, WayPid}) ->
     case lists:keyfind(WayID, 1, Live) of
         false ->
-            Way = {WayID, WayPid, monitor(process, WayPid)},
-            [Way | Live];
+            RegWay = {WayID, WayPid, monitor(process, WayPid)},
+            [RegWay | Live];
         RegWay ->
             note("Funny business:~n  Tried to register: ~p~n  Already registered: ~p",
                  [Way, RegWay]),
