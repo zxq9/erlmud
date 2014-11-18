@@ -13,23 +13,25 @@ mob_jump(LocPid, Mob) -> em_lib:call(LocPid, jump_in, Mob).
 start_link(Conf) ->
     spawn_link(fun() -> init(Conf) end).
 
-init(Conf = {Id, {Name, Desc}}) ->
+init(Conf = {ID, {Name, Desc}}) ->
     note("Initializing with ~p", [Conf]),
     Mobs = [],
     Objs = [],
-    loop({Id, Name, Desc, Mobs, Objs}).
+    Entrances = wayman:get_entrances(ID),
+    Exits = wayman:get_exits(ID),
+    loop({ID, Name, Desc, Mobs, Objs, Entrances, Exits}).
 
 %% Service
-loop(State = {Id, Name, Desc, Mobs, Objs}) ->
+loop(State = {ID, Name, Desc, Mobs, Objs, Entrances, Exits}) ->
   receive
     {audible, Origin, Sound} ->
-        echo(Origin, Sound, State),
+        echo(Origin, Sound, Mobs),
         loop(State);
     {visible, Origin, Action} ->
-        reflect(Origin, Action, State),
+        reflect(Origin, Action, Mobs),
         loop(State);
     {From, Ref, look} ->
-        From ! {Ref, {Name, Desc, Mobs, Objs}},
+        From ! {Ref, {Name, Desc, Mobs, Objs, Entrances, Exits}},
         loop(State);
     {From, Ref, {look, Target}} ->
         View = look_at(Target, Mobs),
@@ -38,11 +40,11 @@ loop(State = {Id, Name, Desc, Mobs, Objs}) ->
     {From, Ref, {jump_in, Mob}} ->
         NewMobs = jump_in(Mob, Mobs),
         From ! {Ref, ok},
-        loop({Id, Name, Desc, NewMobs, Objs});
+        loop({ID, Name, Desc, NewMobs, Objs, Entrances, Exits});
     status ->
-        note("Status:~n  Id: ~p~n  Name: ~p~n  Desc: ~p"
-             "  Mobs: ~p~n  Objects: ~p",
-             [Id, Name, Desc, Mobs, Objs]),
+        note("Status:~n  ID: ~p~n  Name: ~p~n  Desc: ~p"
+             "  Mobs: ~p~n  Objects: ~p~n  Entrances: ~p~n  Exits: ~p",
+             [ID, Name, Desc, Mobs, Objs, Entrances, Exits]),
         loop(State);
     code_change ->
         ?MODULE:code_change(State);
@@ -66,11 +68,11 @@ jump_in(Mob = {_, Pid, _}, Mobs) ->
     link(Pid),
     [Mob | Mobs].
 
-echo(Origin, Sound, {_, _, _, Mobs, _}) ->
+echo(Origin, Sound, Mobs) ->
     Event = string:join([Origin, Sound], " "),
     [MPid ! {observe, Event} || {_, MPid, _} <- Mobs].
 
-reflect(Origin, Sound, {_, _, _, Mobs, _}) ->
+reflect(Origin, Sound, Mobs) ->
     Event = string:join([Origin, Sound], " "),
     [MPid ! {observe, Event} || {_, MPid, _} <- Mobs].
 

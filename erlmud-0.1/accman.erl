@@ -52,7 +52,7 @@ starter(Spawn, Parent, Conf) ->
     end.
 
 init(Parent, Conf) ->
-    note("Notional initialization with ~p", [Conf]),
+    note("Initializing with ~p", [Conf]),
     Registry = case Conf of
         [] -> dict:new();
         _  -> init_registry(Conf)

@@ -31,7 +31,7 @@ starter(Spawn, Parent, Conf) ->
     end.
 
 init(Parent, Conf) ->
-    note("Notional initialization with ~p.", [Conf]),
+    note("Initializing with ~p.", [Conf]),
     Accs = load_accounts(),
     Chars = load_characters(),
     loop({Parent, Conf, Accs, Chars}).

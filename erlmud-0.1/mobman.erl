@@ -26,7 +26,7 @@ starter(Spawn, Parent, Conf) ->
 
 init(Parent, IlkMods) ->
     process_flag(trap_exit, true),
-    note("Notional initialization with ~p", [IlkMods]),
+    note("Initializing with ~p", [IlkMods]),
     Live = [],
     Conf = [],
     loop({Parent, IlkMods, Live, Conf}).

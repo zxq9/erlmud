@@ -22,7 +22,7 @@ init(Parent, PortNum) ->
     note("Starting up on port ~p", [PortNum]),
     process_flag(trap_exit, true),
     {Port, Listener} = tcplistener:start(self(), PortNum),
-    Connections = orddict:new(),
+    Connections = dict:new(),
     accepting(Parent, PortNum, Connections, Port, Listener).
 
 %% Service states
@@ -32,11 +32,11 @@ accepting(Parent, PortNum, Connections, Port, Listener) ->
         note("Accepted on ~p", [Port]),
         Talker = teltalker:start_link(self(), Socket),
         gen_tcp:controlling_process(Socket, Talker),
-        UpdateConn = orddict:store(Talker, Socket, Connections),
+        UpdateConn = dict:store(Talker, Socket, Connections),
         accepting(Parent, PortNum, UpdateConn, Port, Listener);
     {end_connection, Talker} ->
         note("Talker (~p) connection ended.", [Talker]),
-        UpdateConn = orddict:erase(Talker, Connections),
+        UpdateConn = dict:erase(Talker, Connections),
         accepting(Parent, PortNum, UpdateConn, Port, Listener);
     stop_listening ->
         gen_tcp:close(Port),
@@ -44,7 +44,7 @@ accepting(Parent, PortNum, Connections, Port, Listener) ->
     status ->
         note("Accepting connections.~n"
              "  PortNum: ~p~n  Connections: ~p~n  Port: ~p~n  Listener: ~p",
-             [PortNum, Connections, Port, Listener]),
+             [PortNum, dict:to_list(Connections), Port, Listener]),
         accepting(Parent, PortNum, Connections, Port, Listener);
     {'EXIT', Listener, Reason} ->
         note("Listener (~p) exited with ~p", [Listener, Reason]),
@@ -54,9 +54,9 @@ accepting(Parent, PortNum, Connections, Port, Listener) ->
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]),
         close_all(Connections);
-    {'EXIT', Pid, Reason} ->
-        note("~p exited with ~p", [Pid, Reason]),
-        accepting(Parent, PortNum, Connections, Port, Listener);
+    Message = {'EXIT', _, _} ->
+        NewConnections = handle_exit(Message, Connections),
+        accepting(Parent, PortNum, NewConnections, Port, Listener);
     code_change ->
         ?MODULE:code_change(accepting,
                             {Parent, PortNum, Connections, Port},
@@ -74,21 +74,21 @@ refusing(Parent, PortNum, Connections) ->
   receive
     {end_connection, Talker} ->
         note("Talker (~p) connection ended.", [Talker]),
-        UpdateConn = orddict:erase(Talker, Connections),
+        UpdateConn = dict:erase(Talker, Connections),
         refusing(Parent, PortNum, UpdateConn);
     start_listening ->
         {Port, Listener} = tcplistener:start(self(), PortNum),
         accepting(Parent, PortNum, Connections, Port, Listener);
     status ->
         note("Refusing connections.~n  PortNum: ~p~n  Connections: ~p~n",
-             [PortNum, Connections]),
+             [PortNum, dict:to_list(Connections)]),
         refusing(Parent, PortNum, Connections);
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]),
         close_all(Connections);
-    {'EXIT', Pid, Reason} ->
-        note("~p exited with ~p", [Pid, Reason]),
-        refusing(Parent, PortNum, Connections);
+    Message = {'EXIT', _, _} ->
+        NewConnections = handle_exit(Message, Connections),
+        refusing(Parent, PortNum, NewConnections);
     code_change ->
         ?MODULE:code_change(refusing,
                             {Parent, PortNum, Connections},
@@ -106,6 +106,16 @@ close_all(Connections) ->
     Pids = live_pids(Connections),
     em_lib:broadcast(Pids, shutdown),
     ok.
+
+handle_exit({_, Pid, Reason}, Connections) ->
+    case dict:is_key(Pid, Connections) of
+        true  ->
+            note("Talker (~p) connection ended.", [Pid]),
+            dict:erase(Pid, Connections);
+        false ->
+            note("~p exited with ~p", [Pid, Reason]),
+            Connections
+    end.
 
 live_pids(Connections) ->
     [Pid || {Pid, _} <- Connections].

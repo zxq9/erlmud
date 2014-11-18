@@ -26,7 +26,7 @@ starter(Spawn, Parent, Conf) ->
 
 init(Parent, Conf) ->
     process_flag(trap_exit, true),
-    note("Notional initialization with ~p", [Conf]),
+    note("Initializing with ~p", [Conf]),
     Live = genesis(Conf),
     loop({Parent, Live, Conf}).
 
@@ -44,7 +44,7 @@ loop(State = {Parent, Live, Conf}) ->
     Message = {'EXIT', _, _} ->
         NewLive = handle_exit(Message, Live, Conf),
         loop({Parent, NewLive, Conf});
-    stats ->
+    status ->
         note("Status:~n  Live: ~p~n  Conf: ~p", [Live, Conf]),
         loop(State);
     code_change ->

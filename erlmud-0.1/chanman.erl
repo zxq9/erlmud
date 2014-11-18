@@ -35,7 +35,7 @@ starter(Spawn, Parent, Conf) ->
 
 init(Parent, Conf) ->
     process_flag(trap_exit, true),
-    note("Notional initialization with ~tp.", [Conf]),
+    note("Initializing with ~tp.", [Conf]),
     Channels = [],
     loop(Parent, Channels).
 

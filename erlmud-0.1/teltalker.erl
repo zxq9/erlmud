@@ -20,8 +20,7 @@ talk(Server, Socket, Telcon) ->
         gen_tcp:send(Socket, Message),
         talk(Server, Socket, Telcon);
     {tcp_closed, Socket} ->
-        note("Socket closed. Retiring."),
-        Server ! {end_connection, self()};
+        note("Socket closed. Retiring.");
     code_change ->
         ?MODULE:code_change(Server, Socket, Telcon);
     shutdown ->
