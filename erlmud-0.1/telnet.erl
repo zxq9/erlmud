@@ -118,7 +118,7 @@ handle_exit({_, Pid, Reason}, Connections) ->
     end.
 
 live_pids(Connections) ->
-    [Pid || {Pid, _} <- Connections].
+    [Pid || {Pid, _} <- dict:to_list(Connections)].
 
 %% Code changer
 code_change(Continue, Args, Connections) ->

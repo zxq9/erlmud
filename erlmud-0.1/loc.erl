@@ -31,9 +31,7 @@ init_ways(ID) ->
     {{LiveIn, LiveOut}, {Entrances, Exits}}.
 
 activate(Entrances) ->
-    Live = [{Way, way:start_link(Way)} || Way <- Entrances],
-    [wayman:reg_live(Way) || Way <- Live],
-    Live.
+    [{Way, way:start_link(Way)} || Way <- Entrances].
 
 check(Exits) ->
     IDs = [{WayID, wayman:get_pid(WayID)} || WayID <- Exits],
@@ -75,7 +73,7 @@ loop(State = {ID,
         NewLiveOut = handle_down(Message, LiveOut),
         loop({ID, Info, Manifest, {{LiveIn, NewLiveOut}, {Entrances, Exits}}});
     status ->
-        note("Status:~n  ID: ~p~n  Name: ~p~n  Desc: ~p"
+        note("Status:~n  ID: ~p~n  Name: ~p~n  Desc: ~p~n"
              "  Mobs: ~p~n  Objects: ~p~n"
              "  LiveIn: ~p~n  LiveOut: ~p~n"
              "  Entrances: ~p~n  Exits: ~p",

@@ -97,10 +97,13 @@ outs(Ways, LocID) ->
     Find = fun(WayID) -> way:in(WayID) == LocID end,
     [Z || Z <- lists:filter(Find, Ways)].
 
-handle_down(Live, Message = {_, _, _, Ref, _}) ->
+handle_down(Live, Message = {_, Ref, _, _, _}) ->
     case lists:keyfind(Ref, 3, Live) of
-        Way = {_, _, _} -> lists:delete(Way, Live);
-        false           -> note("Received ~p", [Message])
+        Way = {_, _, _} ->
+            lists:delete(Way, Live);
+        false ->
+            note("Received ~p", [Message]),
+            Live
     end.
 
 %% Code changer
