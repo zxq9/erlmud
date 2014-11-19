@@ -14,7 +14,7 @@ welcome(Talker) ->
         unregistered   -> register_acc(Talker, Handle);
         registered     -> authenticate(Talker, Handle);
         {fail, Reason} ->
-            note("check_registry_for/1 failed with ~p~n", [Reason]),
+            note("accman:check/1 failed with ~p~n", [Reason]),
             Talker ! {send, "Something went wrong, let's try that again...\r\n"},
             welcome(Talker)
     end.
@@ -27,7 +27,7 @@ register_acc(Talker, Handle) ->
     case Check of
         true  ->
             case accman:create(Handle, PassHash) of
-                ok  ->
+                ok ->
                     M = "\r\nWelcome to ErlMUD, " ++ Handle ++ "!\r\n" ++
                         "Enjoy your stay, and don't feed the trolls.\r\n" ++
                         Handle ++ " $ ",
@@ -95,7 +95,7 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
         unprompted(Message, State),
         loop(State);
     {'DOWN', MRef, process, MPid, _Reason} ->
-        unprompted("Minion disconnected.", State),
+        unprompted("Your minion vanished in a puff of smoke!", State),
         Actions = init_actions(none),
         loop({Talker, Handle, {none, none, Actions}, Channels});
     Message = {'DOWN', _, process, _, _} ->

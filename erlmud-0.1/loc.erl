@@ -1,13 +1,21 @@
 -module(loc).
 -export([start_link/1, code_change/1,
-         look/1, look/2, mob_jump/2]).
+         look/1, look/2, depart/3, arrive/3, bounce/2, mob_jump/2, mob_vanish/2]).
 
 %% Interface
 look(LocPid) -> em_lib:call(LocPid, look).
 
 look(LocPid, Target) -> em_lib:call(LocPid, look, Target).
 
+depart(LocPid, Mob, Exit) -> em_lib:call(LocPid, depart, {Mob, Exit}).
+
+arrive(LocPid, Mob, Entrance) -> em_lib:call(LocPid, arrive, {Mob, Entrance}).
+
+bounce(LocPid, Mob) -> em_lib:call(LocPid, rebound, Mob).
+
 mob_jump(LocPid, Mob) -> em_lib:call(LocPid, jump_in, Mob).
+
+mob_vanish(LocPid, Mob) -> em_lib:call(LocPid, vanish, Mob).
 
 %% Startup
 start_link(Conf) ->
@@ -31,12 +39,13 @@ init_ways(ID) ->
     {{LiveIn, LiveOut}, {Entrances, Exits}}.
 
 activate(Entrances) ->
-    [{Way, way:start_link(Way)} || Way <- Entrances].
+    Self = self(),
+    [{Way, way:start_link(Self, Way)} || Way <- Entrances].
 
 check(Exits) ->
     IDs = [{WayID, wayman:get_pid(WayID)} || WayID <- Exits],
     Alive = [{WayID, WayPid} || {WayID, {ok, WayPid}} <- IDs],
-    [{WayID, WayPid, monitor(process, WayPid)} || {WayID, WayPid} <- Alive].
+    [{way:name(WayID), WayID, WayPid, monitor(process, WayPid)} || {WayID, WayPid} <- Alive].
 
 neighbors_monitor(LiveIn) ->
     NPids = [{locman:get_pid(way:in(WayID)), WayID, WayPid} || {WayID, WayPid} <- LiveIn],
@@ -62,8 +71,24 @@ loop(State = {ID,
         View = look_at(Target, Mobs),
         From ! {Ref, View},
         loop(State);
+    {From, Ref, {depart, {Mob, Exit}}} ->
+        {Result, NewMobs} = departure(Mob, Exit, Mobs, LiveOut),
+        From ! {Ref, Result},
+        loop({ID, Info, {NewMobs, Objs}, Ways});
+    {From, Ref, {arrive, {Mob, Entrance}}} ->
+        {Result, NewMobs} = arrival(Mob, Entrance, Mobs, ID),
+        From ! {Ref, Result},
+        loop({ID, Info, {NewMobs, Objs}, Ways});
+    {From, Ref, {rebound, Mob}} ->
+        rebound(Mob, Mobs),
+        From ! {Ref, {ID, self()}},
+        loop({ID, Info, {Mobs, Objs}, Ways});
     {From, Ref, {jump_in, Mob}} ->
         NewMobs = jump_in(Mob, Mobs),
+        From ! {Ref, ok},
+        loop({ID, Info, {NewMobs, Objs}, Ways});
+    {From, Ref, {vanish, Mob}} ->
+        NewMobs = vanish(Mob, Mobs),
         From ! {Ref, ok},
         loop({ID, Info, {NewMobs, Objs}, Ways});
     {monitor, {way, WayID, WayPid}} ->
@@ -73,8 +98,9 @@ loop(State = {ID,
         NewLiveOut = handle_down(Message, LiveOut),
         loop({ID, Info, Manifest, {{LiveIn, NewLiveOut}, {Entrances, Exits}}});
     status ->
-        note("Status:~n  ID: ~p~n  Name: ~p~n  Desc: ~p~n"
-             "  Mobs: ~p~n  Objects: ~p~n"
+        note("Status:~n"
+             "  ID: ~p~n  Name: ~p~n  Desc: ~p~n"
+             "  Mobiles: ~p~n  Objects: ~p~n"
              "  LiveIn: ~p~n  LiveOut: ~p~n"
              "  Entrances: ~p~n  Exits: ~p",
              [ID, Name, Desc, Mobs, Objs, LiveIn, LiveOut, Entrances, Exits]),
@@ -96,32 +122,58 @@ look_at(Target, Mobs) ->
         false           -> not_seen
     end.
 
-jump_in(Mob = {_, Pid, _}, Mobs) ->
-    note("Jumping in ~p", [Mob]),
-    link(Pid),
-    [Mob | Mobs].
-
 echo(Origin, Sound, Mobs) ->
     Event = string:join([Origin, Sound], " "),
     [MPid ! {observe, Event} || {_, MPid, _} <- Mobs].
 
-reflect(Origin, Sound, Mobs) ->
-    Event = string:join([Origin, Sound], " "),
+reflect(Origin, Sight, Mobs) ->
+    Event = string:join([Origin, Sight], " "),
     [MPid ! {observe, Event} || {_, MPid, _} <- Mobs].
 
+departure(Mob = {_, Pid, _}, ExitName, Mobs, LiveOut) ->
+    case lists:keyfind(ExitName, 1, LiveOut) of
+        {_, _, ExitPid, _} ->
+            unlink(Pid),
+            {{ok, ExitPid}, lists:delete(Mob, Mobs)};
+        false ->
+            {{error, noexit}, Mobs}
+    end.
+
+arrival(Mob = {MobName, MobPid, _}, {WayName, _, _}, Mobs, ID) ->
+    link(MobPid),
+    Sight = "arrives from the " ++ WayName,
+    reflect(MobName, Sight, Mobs),
+    {{ok, {ID, self()}}, [Mob | Mobs]}.
+
+rebound(Mob = {MobName, MobPid, _}, Mobs) ->
+    reflect(MobName, "couldn't get out.", lists:delete(Mob, Mobs)),
+    MobPid ! {observe, "You couldn't leave."},
+    ok.
+
+jump_in(Mob = {MobName, MobPid, _}, Mobs) ->
+    link(MobPid),
+    reflect(MobName, "appears, as if by magic.", Mobs),
+    [Mob | Mobs].
+
+vanish(Mob = {MobName, MobPid, _}, Mobs) ->
+    unlink(MobPid),
+    NewMobs = lists:delete(Mob, Mobs),
+    reflect(MobName, "vanishes in a puff of smoke!", NewMobs),
+    NewMobs.
+
 monitor_exit(WayID, WayPid, LiveOut, Exits) ->
-    LiveOutIDs = [ID || {_, ID, _} <- LiveOut],
+    LiveOutIDs = [ID || {_, ID, _, _} <- LiveOut],
     case lists:member(WayID, Exits) and not lists:member(WayID, LiveOutIDs) of
         true ->
             Mon = monitor(process, WayPid),
-            [{WayID, WayPid, Mon} | LiveOut];
+            [{way:name(WayID), WayID, WayPid, Mon} | LiveOut];
         false ->
             LiveOut
     end.
 
 handle_down(Message = {_, Ref, _, _, _}, LiveOut) ->
-    case lists:keyfind(Ref, 3, LiveOut) of
-        Out = {_, _, _} ->
+    case lists:keyfind(Ref, 4, LiveOut) of
+        Out = {_, _, _, _} ->
             lists:delete(Out, LiveOut);
         false ->
             note("Received ~p", [Message]),

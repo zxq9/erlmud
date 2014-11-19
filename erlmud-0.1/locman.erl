@@ -61,13 +61,14 @@ loop(State = {Parent, Live, Conf}) ->
 get_pid(LocID, Live) ->
     case lists:keyfind(LocID, 1, Live) of
         {_, Pid} -> {ok, Pid};
-        false    -> error
+        false    -> {error, noloc}
     end.
 
 %% Magic
 handle_exit(Message = {_, Pid, _}, Live, Conf) ->
     case lists:keyfind(Pid, 2, Live) of
         Loc = {LocID, _} ->
+            note("~p exited with ~p", [LocID, Message]),
             ScrubLive = lists:delete(Loc, Live),
             case lists:keyfind(LocID, 1, Conf) of
                 LocConf = {_, _} -> [{LocID, loc:start_link(LocConf)} | ScrubLive];

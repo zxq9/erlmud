@@ -11,8 +11,8 @@ init() ->
     Services = [{chanman, start_link, []},
                 {charman, start_link, []},
                 {accman, start_link, []},
-                {wayman, start_link, [{north, {0,0,0}, {1,0,0}},
-                                      {south, {1,0,0}, {0,0,0}}]},
+                {wayman, start_link, [{"north", {0,0,0}, {1,0,0}},
+                                      {"south", {1,0,0}, {0,0,0}}]},
                 {locman, start_link, [{{0,0,0},
                                        {"Town Square",
                                         "A desolate, featureless town square, "

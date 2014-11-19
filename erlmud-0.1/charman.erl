@@ -1,16 +1,19 @@
 -module(charman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/1,
-         list/1, load/2, make/2, drop/2]).
+         save/1, list/1, load/2, make/2, drop/2]).
 
 %% Interface
-list(Acc) -> call({get_chars, Acc}).
+save(CharState) -> call(save, CharState).
 
-load(Acc, Name) -> call({load_char, {Acc, Name}}).
+list(Acc) -> call(get_chars, Acc).
 
-make(Acc, Char) -> call({make_char, {Acc, Char}}).
+load(Acc, Name) -> call(load_char, {Acc, Name}).
 
-drop(Acc, Name) -> call({drop_char, {Acc, Name}}).
+make(Acc, Char) -> call(make_char, {Acc, Char}).
 
+drop(Acc, Name) -> call(drop_char, {Acc, Name}).
+
+call(Verb, Data) -> call({Verb, Data}).
 call(Request) -> em_lib:call(?MODULE, Request).
 
 %% Startup
@@ -43,6 +46,10 @@ load_characters() -> dict:new().
 %% Service
 loop(State = {Parent, Conf, Accs, Chars}) ->
   receive
+    {From, Ref, {save, CharState}} ->
+        NewChars = remember(CharState, Chars),
+        From ! {Ref, ok},
+        loop({Parent, Conf, Accs, NewChars});
     {From, Ref, {get_chars, Acc}} ->
         Result = get_chars(Acc, Accs),
         From ! {Ref, Result},
@@ -76,6 +83,9 @@ loop(State = {Parent, Conf, Accs, Chars}) ->
   end.
 
 %% Registry functions
+remember({_, Name, Ilk, Desc, {LocID, _}}, Chars) ->
+    dict:store(Name, {Ilk, Desc, LocID}, Chars).
+
 get_chars(Acc, Accs) ->
     case dict:find(Acc, Accs) of
         {ok, Result} -> Result;

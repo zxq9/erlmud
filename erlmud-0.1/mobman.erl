@@ -1,9 +1,12 @@
 -module(mobman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/1,
-         spawn_minion/1]).
+         spawn_minion/1, relocate/2]).
 
 %% interface
 spawn_minion(MobData) -> call({spawn_minion, MobData}).
+
+relocate(Mob, default) -> call({jump, {Mob, default_loc(Mob)}});
+relocate(Mob, LocID)   -> call({jump, {Mob, LocID}}).
 
 call(Request) -> em_lib:call(?MODULE, Request).
 
@@ -38,6 +41,10 @@ loop(State = {Parent, IlkMods, Live, Conf}) ->
         {MobPid, NewLive} = spawn_minion(Controller, MobData, IlkMods, Live),
         Controller ! {Ref, MobPid},
         loop({Parent, IlkMods, NewLive, Conf});
+    {From, Ref, {jump, {Mob, LocID}}} ->
+        NewLoc = jump(Mob, LocID),
+        From ! {Ref, NewLoc},
+        loop(State);
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]);
     Message = {'EXIT', _, _} ->
@@ -64,16 +71,28 @@ spawn_minion(Controller, MobData = {_, {Ilk, _, _}}, IlkMods, Live) ->
     NewLive = [{MobPid, Ilk} | Live],
     {MobPid, NewLive}.
 
+%% Mob wrangling
+jump(Mob, LocID) ->
+    case locman:get_pid(LocID) of
+        {ok, LocPid} ->
+            loc:mob_jump(LocPid, Mob),
+            {LocID, LocPid};
+        {error, _} ->
+            jump(Mob, default_loc(Mob))
+    end.
+
 %% Magic
 handle_exit(Live, Message = {_, Pid, _}) ->
     case lists:keyfind(Pid, 1, Live) of
         Mob = {_, _} ->
-            note("~p sent 'EXIT'", [Mob]),
+            note("~p exited with ~p", [Mob, Message]),
             lists:delete(Mob, Live);
         false ->
             note("Received ~p", [Message]),
             Live
     end.
+
+default_loc(_) -> {0,0,0}.
 
 %% Code changer
 code_change(State = {_, _, Live, _}) ->

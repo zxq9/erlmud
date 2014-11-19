@@ -10,12 +10,22 @@ get_actions(MobPid) -> em_lib:call(MobPid, actions).
 start_link(Con, Conf) ->
     spawn_link(fun() -> init(Con, Conf) end).
 
-init(Con, Conf = {Name, {Ilk, Desc, LocID}}) ->
+init(ConPid, Conf = {Name, {Ilk, Desc, LastLocID}}) ->
     note("Initializing with ~p", [Conf]),
-    Ref = monitor(process, Con),
-    {ok, LocPid} = locman:get_pid(LocID),
-    ok = loc:mob_jump(LocPid, {Name, self(), Ilk}),
-    loop({{Con, Ref}, Name, Ilk, Desc, {LocID, LocPid}}).
+    ConRef = monitor(process, ConPid),
+    Me = {Name, self(), Ilk},
+    locless(Me, {{ConPid, ConRef}, Name, Ilk, Desc}, LastLocID).
+
+locless(Me, {Con, Name, Ilk, Desc}, none) ->
+    Loc = mobman:relocate(Me, default),
+    enter_world({Con, Name, Ilk, Desc, Loc});
+locless(Me, {Con, Name, Ilk, Desc}, LastLocID) ->
+    Loc = mobman:relocate(Me, LastLocID),
+    enter_world({Con, Name, Ilk, Desc, Loc}).
+
+enter_world({Con = {ConPid, _}, Name, Ilk, Desc, Loc = {_, LocPid}}) ->
+    look(LocPid, ConPid),
+    loop({Con, Name, Ilk, Desc, Loc}).
 
 loop(State = {Con = {ConPid, ConRef}, Name, Ilk, Desc, Loc}) ->
   receive
@@ -33,11 +43,9 @@ loop(State = {Con = {ConPid, ConRef}, Name, Ilk, Desc, Loc}) ->
         From ! {Ref, actions()},
         loop(State);
     {ConPid, divorce} ->
-        note("Controller cut ties. Retiring.");
+        divorce(State);
     Message = {'DOWN', ConRef, process, ConPid, _} ->
-        note("Controller died with ~p~n  ...I'm dead.", [Message]);
-%       NewState = spawn_controller(State),
-%       loop(NewState);
+        con_down(Message, State);
     status ->
         note("Status:~n"
              "  Controller: ~p~n  Name: ~p~n"
@@ -61,18 +69,41 @@ evaluate("say", String, State = {{_, _}, Name, _, _, {_, LocPid}}) ->
     LocPid ! {audible, Origin, Sound},
     State;
 evaluate("look", "", State = {{ConPid, _}, _, _, _, {_, LocPid}}) ->
-    View = loc:look(LocPid),
-    ConPid ! {look, loc, View},
+    look(LocPid, ConPid),
     State;
 evaluate("look", String, State = {{ConPid, _}, _, _, _, {_, LocPid}}) ->
     {Target, _} = head(String),
     View = loc:look(LocPid, Target),
     ConPid ! {look, target, View},
     State;
+evaluate("go", String, {Con = {ConPid, _}, Name, Ilk, Desc, {_, LocPid}}) ->
+    {Target, _} = head(String),
+    Me = {Name, self(), Ilk},
+    NewLoc = depart(LocPid, Me, Target, ConPid),
+    {Con, Name, Ilk, Desc, NewLoc};
 evaluate(Keyword, String, State = {{ConPid, _}, Name, _, _, _}) ->
     Message = io_lib:format("~p received {~p,~p}", [Name, Keyword, String]),
     ConPid ! {notice, Message},
     State.
+
+%% Action functions
+look(LocPid, ConPid) ->
+    View = loc:look(LocPid),
+    ConPid ! {look, loc, View},
+    ok.
+
+depart(LocPid, Me, Target, ConPid) ->
+    case loc:depart(LocPid, Me, Target) of
+        {ok, WayPid} ->
+            {ok, NewLoc = {_, NewLocPid}} = way:enter(WayPid, Me),
+            look(NewLocPid, ConPid),
+            NewLoc;
+        {error, noexit} ->
+            loc:bounce(LocPid, Me);
+        Res = {fail, _} ->
+            note("Received ~p from loc:depart/3", [Res]),
+            mobman:relocate(Me)
+    end.
 
 %% Magic
 actions() ->
@@ -92,6 +123,18 @@ head(Word, [H|T]) ->
         $\s -> {Word, T};
         Z   -> head([Z|Word], T)
     end.
+
+divorce(State = {_, Name, Ilk, _, {_, LocPid}}) ->
+    note("Controller cut ties. Retiring."),
+    ok = loc:mob_vanish(LocPid, {Name, self(), Ilk}),
+    ok = charman:save(State).
+
+con_down(Message, State = {_, Name, Ilk, _, {_, LocPid}}) ->
+    note("Controller died with ~p~n  ...I'm dead.", [Message]),
+    ok = loc:mob_vanish(LocPid, {Name, self(), Ilk}),
+    ok = charman:save(State).
+%   NewState = spawn_controller(State),
+%   loop(NewState);
 
 %% Code changer
 code_change(State) ->

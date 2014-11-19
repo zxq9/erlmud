@@ -73,15 +73,16 @@ loop(State = {Parent, Live, Ways}) ->
 
 %% Way registry
 reg(Live, Way = {WayID, WayPid}) ->
-    case lists:keyfind(WayID, 1, Live) of
+    Scrubbed = case lists:keyfind(WayID, 1, Live) of
         false ->
-            RegWay = {WayID, WayPid, monitor(process, WayPid)},
-            [RegWay | Live];
-        RegWay ->
-            note("Funny business:~n  Tried to register: ~p~n  Already registered: ~p",
-                 [Way, RegWay]),
-            Live
-    end.
+            note("Registering ~p", [Way]),
+            Live;
+        PrevWay ->
+            note("Registering ~p over ~p", [Way, PrevWay]),
+            lists:delete(PrevWay)
+    end,
+    RegWay = {WayID, WayPid, monitor(process, WayPid)},
+    [RegWay | Scrubbed].
 
 pid(Live, WayID) ->
     case lists:keyfind(WayID, 1, Live) of
@@ -99,7 +100,8 @@ outs(Ways, LocID) ->
 
 handle_down(Live, Message = {_, Ref, _, _, _}) ->
     case lists:keyfind(Ref, 3, Live) of
-        Way = {_, _, _} ->
+        Way = {WayID, _, _} ->
+            note("~p went down with ~p", [WayID, Message]),
             lists:delete(Way, Live);
         false ->
             note("Received ~p", [Message]),
