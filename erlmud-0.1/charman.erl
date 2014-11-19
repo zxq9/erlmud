@@ -99,7 +99,8 @@ load_char(Accs, Chars, Acc, Name) ->
                 true  -> {ok, {Name, dict:fetch(Name, Chars)}};
                 false -> {error, Name ++ " is not one of your characters."}
             end;
-        false -> {error, Name ++ " is not one of your characters."}
+        error ->
+            {error, Name ++ " is not one of your characters."}
     end.
 
 make_char(State = {Parent, Conf, Accs, Chars}, Acc, {Name, Data}) ->

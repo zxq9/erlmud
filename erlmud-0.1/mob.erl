@@ -33,8 +33,8 @@ loop(State = {Con = {ConPid, ConRef}, Name, Ilk, Desc, Loc}) ->
         SS = Name ++ " (* Healthy Fresh)",
         From ! {Ref, SS},
         loop(State);
-    {observe, String} ->
-        ConPid ! {notice, String},
+    {observe, Event} ->
+        ConPid ! {observation, Event},
         loop(State);
     {action, {Keyword, String}} ->
         NewState = evaluate(Keyword, String, State),

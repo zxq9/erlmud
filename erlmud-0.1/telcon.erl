@@ -81,7 +81,10 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
         NewState = evaluate(Bin, State),
         loop(NewState);
     {chat, Message} ->
-        unprompted(Message, State),
+        handle_chat(Message, State),
+        loop(State);
+    {observation, {Type, Event}} ->
+        handle_obs(Type, Event, State),
         loop(State);
     {notice, Message} ->
         unprompted(Message, State),
@@ -142,6 +145,13 @@ perform(_, _, {none, _, _}) ->
 perform(Keyword, String, {MPid, _, _}) ->
     MPid ! {action, {Keyword, String}},
     none.
+
+handle_chat(Message, State) ->
+    unprompted(Message, State).
+
+handle_obs(_, {Origin, Sound}, State) ->
+    Message = string:join([Origin, Sound], " "),
+    unprompted(Message, State).
 
 see_loc(View) ->
     io_lib:format("You see ~p", [View]).

@@ -123,11 +123,11 @@ look_at(Target, Mobs) ->
     end.
 
 echo(Origin, Sound, Mobs) ->
-    Event = string:join([Origin, Sound], " "),
+    Event = {aural, {Origin, Sound}},
     [MPid ! {observe, Event} || {_, MPid, _} <- Mobs].
 
 reflect(Origin, Sight, Mobs) ->
-    Event = string:join([Origin, Sight], " "),
+    Event = {visual, {Origin, Sight}},
     [MPid ! {observe, Event} || {_, MPid, _} <- Mobs].
 
 departure(Mob = {_, Pid, _}, ExitName, Mobs, LiveOut) ->
