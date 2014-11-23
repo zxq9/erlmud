@@ -66,16 +66,17 @@ authenticate(Talker, Handle) ->
     end.
 
 init(Talker, Handle) ->
-    Minion = {none, none, init_actions(none)},
+    Minion = {none, none, init_actions(none, none)},
+    Aliases = default_command_alias(),
     Channels = [],
-    State = {Talker, Handle, Minion, Channels},
+    State = {Talker, Handle, Aliases, Minion, Channels},
     loop(State).
 
-init_actions(none) -> [];
-init_actions(MobPid) -> mob:get_actions(MobPid).
+init_actions(none, none)   -> [];
+init_actions(MobPid, Form) -> mob:get_actions(MobPid, Form).
 
 %% Service
-loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
+loop(State = {Talker, Handle, Aliases, Minion = {MPid, MRef, Actions}, Channels}) ->
   receive
     {received, Bin} ->
         NewState = evaluate(Bin, State),
@@ -83,30 +84,22 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
     {chat, Message} ->
         handle_chat(Message, State),
         loop(State);
-    {observation, {Type, Event}} ->
-        handle_obs(Type, Event, State),
+    {observation, Event} ->
+        observe(Event, State),
         loop(State);
-    {notice, Message} ->
-        unprompted(Message, State),
-        loop(State);
-    {look, loc, View} ->
-        Message = see_loc(View),
-        unprompted(Message, State),
-        loop(State);
-    {look, target, View} ->
-        Message = see_target(View),
+    {system, Message} ->
         unprompted(Message, State),
         loop(State);
     {'DOWN', MRef, process, MPid, _Reason} ->
         unprompted("Your minion vanished in a puff of smoke!", State),
-        Actions = init_actions(none),
-        loop({Talker, Handle, {none, none, Actions}, Channels});
+        Actions = init_actions(none, none),
+        loop({Talker, Handle, Aliases, {none, none, Actions}, Channels});
     Message = {'DOWN', _, process, _, _} ->
         NewState = handle_down(State, Message),
         loop(NewState);
     status ->
         note("Status:~n  Talker: ~p~n  Handle: ~p~n  Minion: ~p~n Channels: ~p",
-             [Talker, Handle, Minion, Channels]),
+             [Talker, Handle, Aliases, Minion, Channels]),
         loop(State);
     code_change ->
         ?MODULE:code_change(State);
@@ -118,9 +111,9 @@ loop(State = {Talker, Handle, Minion = {MPid, MRef, Actions}, Channels}) ->
   end.
 
 %% Input evaluation
-evaluate(Bin, State = {Talker, _, _, _}) ->
+evaluate(Bin, State = {Talker, _, Aliases, _, _}) ->
     Line = topline(Bin),
-    Expansion = rewrite(Line),
+    Expansion = rewrite(Line, Aliases),
     {Response, NewState} = interpret(Expansion, State),
     Reply = case Response of
         none -> prompt(NewState);
@@ -130,7 +123,7 @@ evaluate(Bin, State = {Talker, _, _, _}) ->
     Talker ! {send, Reply},
     NewState.
 
-interpret(Expansion, State = {_, _, Minion, Channels}) ->
+interpret(Expansion, State = {_, _, _, Minion, Channels}) ->
     {Keyword, Line} = head(Expansion),
     case Keyword of
         "chat"  -> {chat(Channels, Line), State};
@@ -142,31 +135,35 @@ interpret(Expansion, State = {_, _, Minion, Channels}) ->
 
 perform(_, _, {none, _, _}) ->
     bargle();
-perform(Keyword, String, {MPid, _, _}) ->
-    MPid ! {action, {Keyword, String}},
-    none.
+perform(Keyword, String, {MPid, _, Actions}) ->
+    case lists:keyfind(Keyword, 1, Actions) of
+        {_, Command, Nature, _, _} ->
+            MPid ! {action, {Nature, {Command, String}}},
+            none;
+        false ->
+            bargle()
+    end.
 
 handle_chat(Message, State) ->
     unprompted(Message, State).
 
-handle_obs(_, {Origin, Sound}, State) ->
-    Message = string:join([Origin, Sound], " "),
-    unprompted(Message, State).
-
-see_loc(View) ->
-    io_lib:format("You see ~p", [View]).
-
-see_target(View) ->
-    io_lib:format("You see ~p", [View]).
-
 %% Binary & string handling
-rewrite([]) -> [];
-rewrite(Line = [H|T]) ->
+rewrite([], _) -> [];
+rewrite(Line = [H|T], Aliases) ->
     case H of
-        $#  -> "chat " ++ Line;
-        $\\ -> "sys " ++ T;
-        $?  -> "help " ++ T;
-        _   -> Line
+        $! -> "chat " ++ Line;
+        $/ -> "sys " ++ T;
+        $? -> "help " ++ T;
+        _  -> unalias(Line, Aliases)
+    end.
+
+unalias(Line, []) ->
+    Line;
+unalias(Line, Aliases) ->
+    {Key, Rest} = head(Line),
+    case proplists:lookup(Key, Aliases) of
+        none        -> Line;
+        {_, Actual} -> string:join([Actual, Rest], " ")
     end.
 
 head(Line) ->
@@ -188,14 +185,13 @@ topbin(Bin) ->
 
 topline(Bin) -> binary_to_list(topbin(Bin)).
 
-%stringify(Bin) -> string:tokens(binary_to_list(Bin), "\r\n").
-
 %% Controller actions
-sys(State = {Talker, Handle, _, _}, Line) ->
+sys(State = {Talker, Handle, _, _, _}, Line) ->
     {Keyword, String} = head(Line),
     case Keyword of
         "chan"  -> chan(State, String);
         "char"  -> char(State, String);
+        "alias" -> alias(State, String);
         "who"   -> who(State, String);
         "echo"  -> {echo(Line), State};
         "quit"  -> quit(Talker, Handle);
@@ -203,6 +199,8 @@ sys(State = {Talker, Handle, _, _}, Line) ->
     end.
 
 who(State, _) -> {"Not yet implemented.", State}.
+
+alias(State, _) -> {"Not yet implemented.", State}.
 
 echo(String) -> String.
 
@@ -214,14 +212,16 @@ quit(Talker, Handle) ->
     exit(quit).
 
 help({_, _, []}) ->
-    sys_help() ++ "    none (no minion currently under control)";
+    sys_help() ++ "    [None]";
 help({_, _, Actions}) ->
     Sys = sys_help(),
-    A = string:join([Name ++ "   - " ++ Desc || {Name, Desc} <- Actions], "\r\n    "),
-    string:join([Sys, A], "    ").
+    Act = string:join([string:left(Command, 23) ++ "- " ++ Desc
+                       || {_, _, Command, Desc} <- Actions],
+                      "\r\n    "),
+    string:join([Sys, Act], "    ").
 
 %% Chat
-chan(State = {_, _, _, Channels}, Line) ->
+chan(State = {_, _, _, _, Channels}, Line) ->
     {Keyword, String} = head(Line),
     case Keyword of
         ""      -> {show(Channels), State};
@@ -264,8 +264,9 @@ exam(Channel) ->
             "Channel " ++ Channel ++ " does not exist."
     end.
 
-join(State, []) -> {bargle(), State};
-join(State = {Talker, Handle, Minion, Channels}, String) ->
+join(State, []) ->
+    {bargle(), State};
+join(State = {Talker, Handle, Aliases, Minion, Channels}, String) ->
     {Channel, _} = chanhead(String),
     case lists:keymember(Channel, 1, Channels) of
         true ->
@@ -276,19 +277,20 @@ join(State = {Talker, Handle, Minion, Channels}, String) ->
             ChanMon = monitor(process, ChanPid),
             ChanPid ! {join, {Handle, self()}},
             NewChannels = [{Channel, ChanPid, ChanMon} | Channels],
-            NewState = {Talker, Handle, Minion, NewChannels},
+            NewState = {Talker, Handle, Aliases, Minion, NewChannels},
             {ok, NewState}
     end.
 
-leave(State, []) -> {bargle(), State};
-leave(State = {Talker, Handle, Minion, Channels}, String) ->
+leave(State, []) ->
+    {bargle(), State};
+leave(State = {Talker, Handle, Aliases, Minion, Channels}, String) ->
     {Channel, _} = chanhead(String),
     case lists:keyfind(Channel, 1, Channels) of
         Chan = {Channel, ChanPid, ChanMon} ->
             NewChannels = lists:delete(Chan, Channels),
             demonitor(ChanMon),
             ChanPid ! {leave, self()},
-            NewState = {Talker, Handle, Minion, NewChannels},
+            NewState = {Talker, Handle, Aliases, Minion, NewChannels},
             {ok, NewState};
         false ->
             Response = "You're not in " ++ Channel,
@@ -308,8 +310,8 @@ chat(Channels, Line) ->
 chanhead(String) ->
     {Word, Line} = head(String),
     Channel = case Word of
-        [$#|_] -> Word;
-        _      -> [$#|Word]
+        [$!|_] -> Word;
+        _      -> [$!|Word]
     end,
     {Channel, Line}.
 
@@ -326,7 +328,7 @@ char(State, Line) ->
         _      -> {bargle(), State}
     end.
 
-charlist(State = {_, Handle, _, _}) ->
+charlist(State = {_, Handle, _, _, _}) ->
     Mobs = case charman:list(Handle) of
         []   -> "[None]";
         List -> string:join(List, "\r\n    ")
@@ -334,55 +336,151 @@ charlist(State = {_, Handle, _, _}) ->
     Response = "  Your chars:\r\n    " ++ Mobs,
     {Response, State}.
 
-charload(State = {_, Handle, {none, _, _}, _}, String) ->
+charload(State = {Talker, Handle, Aliases, {none, _, _}, Channels}, String) ->
     {Name, _} = head(String),
-    getchar(State, charman:load(Handle, Name));
+    case charman:load(Handle, Name) of
+        {error, owner} ->
+            Message = Name ++ " is not one of your characters.",
+            {Message, State};
+        {ok, CharData} ->
+            CharPid = mobman:spawn_minion(CharData),
+            CharRef = monitor(process, CharPid),
+            Actions = init_actions(CharPid, text),
+            Minion = {CharPid, CharRef, Actions},
+            NewState = {Talker, Handle, Aliases, Minion, Channels},
+            Message = io_lib:format("Received chardata ~p.", [CharData]),
+            {Message, NewState}
+    end;
 charload(State, _) ->
-    {"You already control a character.", State}.
+    Message = "You already control a character.",
+    {Message, State}.
 
-getchar(State, {error, Response}) ->
-    {Response, State};
-getchar({Talker, Handle, _, Channels}, {ok, CharData}) ->
-    CharPid = mobman:spawn_minion(CharData),
-    CharRef = monitor(process, CharPid),
-    Actions = init_actions(CharPid),
-    Minion = {CharPid, CharRef, Actions},
-    NewState = {Talker, Handle, Minion, Channels},
-    Message = io_lib:format("Received chardata ~p.", [CharData]),
-    {Message, NewState}.
-
-charquit(State = {_, _, {none, _, _}, _}) ->
-    {"You don't have a char to unload.", State};
-charquit({Talker, Handle, {CharPid, CharRef, _}, Channels}) ->
+charquit(State = {_, _, _, {none, _, _}, _}) ->
+    Message = "No characters to unload.",
+    {Message, State};
+charquit({Talker, Handle, Aliases, {CharPid, CharRef, _}, Channels}) ->
     demonitor(CharRef),
     CharPid ! {self(), divorce},
-    Unloaded = {none, none, []},
-    {"You're such a quitter.", {Talker, Handle, Unloaded, Channels}}.
+    NewState = {Talker, Handle, Aliases, {none, none, []}, Channels},
+    Message = "You're such a quitter.",
+    {Message, NewState}.
 
-charmake(State, []) -> {bargle(), State};
-charmake(State = {_, Handle, _, _}, String) ->
+charmake(State, []) ->
+    {bargle(), State};
+charmake(State = {_, Handle, _, _, _}, String) ->
     {Name, _} = head(String),
     Char = solicit_chardata(State, Name),
-    {charman:make(Handle, Char), State}.
+    Message = case charman:make(Handle, Char) of
+        ok              -> Name ++ " created.";
+        {error, exists} -> "That name is already taken!"
+    end,
+    {Message, State}.
 
-solicit_chardata(_, Name) -> {Name, {"mob", "Some description.", {0,0,0}}}.
+solicit_chardata(_, Name) ->
+    {Name,
+     {{Name,
+       ["human"],                   % Aliases
+       humanoid,                    % Ilk
+       "Wanderer",                  % Class
+       "Some description.",         % Description
+       "Male"},                     % Sex
+      {{{15, 30}, {30, 120}},       % Condition
+       {{0, []}, {0, []}},          % Inventory
+       [],                          % Effects
+       {{[], []}},                  % Skills
+       {1, 10},                     % Score
+       {100, 100, 100, 100, 100,    % Stats
+        100, 100, 100, 100}},
+      {0,0,0}}}.                    % Location
 
-chardrop(State, []) -> {bargle(), State};
+chardrop(State, []) ->
+    {bargle(), State};
 chardrop(State = {_, Handle, _, _}, String) ->
     {Name, _} = head(String),
-    {charman:drop(Handle, Name), State}.
+    Message = case charman:drop(Handle, Name) of
+        ok             -> Name ++ " dropped.";
+        {error, owner} -> Name ++ " is not one of your characters!"
+    end,
+    {Message, State}.
 
-%% Magic
-prompt({_, Handle, {none, _, _}, _}) -> Handle ++ " $ ";
-prompt({_, _, {MPid, _, _}, _})      -> em_lib:call(MPid, short_stat) ++ " $ ".
+%% Semantic event -> text translation
+observe(Event, State) ->
+    Message = case Event of
+        {look, self, View} ->
+            io_lib:format("You see: ~p", [View]);
+        {{say, Line}, self, success} ->
+            "You say,\"" ++ Line ++ "\"";
+        {{say, Line}, Speaker, success} ->
+            Speaker ++ " says,\"" ++ Line ++ "\"";
+        {status, self, Stat} ->
+            io_lib:format("Your stat: ~p", [Stat]);
+        {{arrive, Direction}, self, success} ->
+            "You arrive from the " ++ Direction ++ ".";
+        {{arrive, Direction}, Actor, success} ->
+            Actor ++ " arrives from the " ++ Direction;
+        {{depart, Direction}, Actor, success} ->
+            Actor ++ " departs to the " ++ Direction;
+        {{glance, self}, self, _} ->
+            "Feeling a bit vain today?";
+        {{glance, Actor}, Actor, _} ->
+            Actor ++ " dreams of greatness.";
+        {{glance, _}, self, failure} ->
+            "That isn't here.";
+        {{glance, self}, Actor, success} ->
+            Actor ++ " glances at you.";
+        {{glance, _}, self, success} ->
+            silent;
+        {{glance, _}, self, View} ->
+            io_lib:format("~p", [View]);
+        {{glance, Target}, Actor, success} ->
+            Actor ++ " glances at " ++ Target;
+        {warp, self, _} ->
+            "You suddenly find yourself, existing.";
+        {warp, Actor, _} ->
+            "A quantum fluctuation suddenly manifests " ++ Actor ++ " nearby.";
+        {poof, Actor, _} ->
+            Actor ++ " disappears in a puff of smoke!";
+        {Action, Actor, Outcome} ->
+            note("Observed: ~p ~p ~p", [Action, Actor, Outcome]),
+            silent
+    end,
+    emit(Message, State).
 
-unprompted(Data, State = {Talker, _, _, _}) ->
+emit(silent, State) ->
+    State;
+emit(Message, State) ->
+    unprompted(Message, State),
+    State.
+
+prompt({_, Handle, _, {none, _, _}, _}) ->
+    Handle ++ " $ ";
+prompt({_, _, _, {MPid, _, _}, _}) ->
+    {{CurHP, MaxHP}, {CurSP, MaxSP}} = mob:condition(MPid),
+    Health = case (CurHP div (MaxHP div 5)) of
+        5 -> "Healthy";
+        4 -> "Scratched";
+        3 -> "Bloodied";
+        2 -> "Hurt";
+        1 -> "Wounded";
+        0 -> "Critical"
+    end,
+    Stamina = case (CurSP div (MaxSP div 5)) of
+        5 -> "Fresh";
+        4 -> "Strong";
+        3 -> "Tiring";
+        2 -> "Winded";
+        1 -> "Haggard";
+        0 -> "Bonked"
+    end,
+    "(" ++ Health ++ ", " ++ Stamina ++ ") $ ".
+
+unprompted(Data, State = {Talker, _, _, _, _}) ->
     % TODO: Find a better way to clear the current line...
-    Message =
-        "\r                                          \r" ++
+    Message = "\r" ++ string:chars($\s, 78, "\r") ++
         Data ++ "\r\n" ++ prompt(State),
     Talker ! {send, Message}.
 
+%% Magic
 greet() ->
     "\r\nWelcome to ErlMUD\r\n\r\n"
     "By what name do you wish to be known?\r\n"
@@ -396,6 +494,7 @@ sys_help() ->
     "  Command is one of:\r\n"
     "    char [Args]            - Invoke character commands\r\n"
     "    chan [Args]            - Invoke channel commands\r\n"
+    "    alias [Args]           - Invoke alias commands\r\n"
     "    echo Text              - Echo Text back to your terminal\r\n"
     "    quit                   - Disconnect abruptly\r\n"
     "\r\n"
@@ -412,12 +511,46 @@ sys_help() ->
     "    join Channel           - Join or create the named Channel\r\n"
     "    leave Channel          - Leave the named Channel (and close if last member)\r\n"
     "\r\n"
+    "  Alias commands:\r\n"
+    "    list OR (nothing)      - List current command aliases\r\n"
+    "    Alias Text             - Set Alias to Text\r\n"
+    "    clear                  - Clear all aliases\r\n"
+    "    clear Alias            - Clear Alias\r\n"
+    "    default                - Reset aliases to default\r\n"
+    "\r\n"
     "  Shortcuts:\r\n"
-    "    #Channel Text      OR   chat Channel Text\r\n"
-    "    \\Command [Args]    OR   sys Command [Args]\r\n"
+    "    !Channel Text      OR   chat Channel Text\r\n"
+    "    /Command [Args]    OR   sys Command [Args]\r\n"
     "    ?                  OR   help\r\n"
     "\r\n"
     "  Available Actions:\r\n".
+
+default_command_alias() ->
+    [{"n", "go north"},
+     {"s", "go south"},
+     {"e", "go east"},
+     {"w", "go west"},
+     {"d", "go down"},
+     {"u", "go up"},
+     {"l", "look"},
+     {"k", "kill"},
+     {"8", "go north"},
+     {"2", "go south"},
+     {"6", "go east"},
+     {"4", "go west"},
+     {"3", "go down"},
+     {"9", "go up"},
+     {"5", "look"},
+     {"7", "status"},
+     {"/", "kill"},
+     {"st", "status"},
+     {"stat", "status"},
+     {"north", "go north"},
+     {"south", "go south"},
+     {"east", "go east"},
+     {"west", "go west"},
+     {"down", "go down"},
+     {"up", "go up"}].
 
 %% Handler
 handle_down(State = {Talker, Handle, Minion, Channels},

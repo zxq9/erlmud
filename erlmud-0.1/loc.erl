@@ -1,21 +1,30 @@
 -module(loc).
 -export([start_link/1, code_change/1,
-         look/1, look/2, depart/3, arrive/3, bounce/2, mob_jump/2, mob_vanish/2]).
+         event/2, look/1, action/3, depart/3, arrive/2, load/2, drop/2]).
+
+% Entity = {Name, Pid, Aliases, BaseModule}
 
 %% Interface
-look(LocPid) -> em_lib:call(LocPid, look).
+event(LocPid, Data) ->
+    LocPid ! {event, Data}.
 
-look(LocPid, Target) -> em_lib:call(LocPid, look, Target).
+look(LocPid) ->
+    em_lib:call(LocPid, look).
 
-depart(LocPid, Mob, Exit) -> em_lib:call(LocPid, depart, {Mob, Exit}).
+action(LocPid, Target, Event) ->
+    em_lib:call(LocPid, action, {Target, Event}).
 
-arrive(LocPid, Mob, Entrance) -> em_lib:call(LocPid, arrive, {Mob, Entrance}).
+arrive(LocPid, Entity) ->
+    em_lib:call(LocPid, arrive, Entity).
 
-bounce(LocPid, Mob) -> em_lib:call(LocPid, rebound, Mob).
+depart(LocPid, Entity, Exit) ->
+    em_lib:call(LocPid, depart, {Entity, Exit}).
 
-mob_jump(LocPid, Mob) -> em_lib:call(LocPid, jump_in, Mob).
+load(LocPid, Entity) ->
+    em_lib:call(LocPid, load, Entity).
 
-mob_vanish(LocPid, Mob) -> em_lib:call(LocPid, vanish, Mob).
+drop(LocPid, Entity) ->
+    em_lib:call(LocPid, drop, Entity).
 
 %% Startup
 start_link(Conf) ->
@@ -24,9 +33,7 @@ start_link(Conf) ->
 init(Conf = {ID, {Name, Desc}}) ->
     note("Initializing with ~p", [Conf]),
     Info = {Name, Desc},
-    Mobs = [],
-    Objs = [],
-    Manifest = {Mobs, Objs},
+    Manifest = [],
     Ways = init_ways(ID),
     loop({ID, Info, Manifest, Ways}).
 
@@ -45,52 +52,45 @@ activate(Entrances) ->
 check(Exits) ->
     IDs = [{WayID, wayman:get_pid(WayID)} || WayID <- Exits],
     Alive = [{WayID, WayPid} || {WayID, {ok, WayPid}} <- IDs],
-    [{way:name(WayID), WayID, WayPid, monitor(process, WayPid)} || {WayID, WayPid} <- Alive].
+    [{way:front(WayID), WayID, WayPid, monitor(process, WayPid)} || {WayID, WayPid} <- Alive].
 
 neighbors_monitor(LiveIn) ->
-    NPids = [{locman:get_pid(way:in(WayID)), WayID, WayPid} || {WayID, WayPid} <- LiveIn],
-    [LocPid ! {monitor, {way, WayID, WayPid}} || {{ok, LocPid}, WayID, WayPid} <- NPids],
+    Neighbors = [{locman:get_pid(way:in(WayID)), WayID, WayPid} || {WayID, WayPid} <- LiveIn],
+    [LocPid ! {monitor, {way, WayID, WayPid}} || {{ok, LocPid}, WayID, WayPid} <- Neighbors],
     ok.
 
 %% Service
 loop(State = {ID,
               Info = {Name, Desc},
-              Manifest = {Mobs, Objs},
+              Manifest,
               Ways = {{LiveIn, LiveOut}, {Entrances, Exits}}}) ->
   receive
-    {audible, Origin, Sound} ->
-        echo(Origin, Sound, Mobs),
-        loop(State);
-    {visible, Origin, Action} ->
-        reflect(Origin, Action, Mobs),
+    {event, Data} ->
+        broadcast(Data, Manifest),
         loop(State);
     {From, Ref, look} ->
-        From ! {Ref, {Info, Manifest, Ways}},
+        From ! {Ref, State},
         loop(State);
-    {From, Ref, {look, Target}} ->
-        View = look_at(Target, Mobs),
-        From ! {Ref, View},
+    {From, Ref, {action, {Target, Event}}}->
+        Result = arbitrate(Target, Event, Manifest),
+        From ! {Ref, Result},
         loop(State);
-    {From, Ref, {depart, {Mob, Exit}}} ->
-        {Result, NewMobs} = departure(Mob, Exit, Mobs, LiveOut),
+    {From, Ref, {arrive, Entity}} ->
+        {Result, NewManifest} = arrival(Entity, Manifest, ID),
         From ! {Ref, Result},
-        loop({ID, Info, {NewMobs, Objs}, Ways});
-    {From, Ref, {arrive, {Mob, Entrance}}} ->
-        {Result, NewMobs} = arrival(Mob, Entrance, Mobs, ID),
+        loop({ID, Info, NewManifest, Ways});
+    {From, Ref, {depart, {Entity, Exit}}} ->
+        {Result, NewManifest} = departure(Entity, Exit, Manifest, LiveOut),
         From ! {Ref, Result},
-        loop({ID, Info, {NewMobs, Objs}, Ways});
-    {From, Ref, {rebound, Mob}} ->
-        rebound(Mob, Mobs),
-        From ! {Ref, {ID, self()}},
-        loop({ID, Info, {Mobs, Objs}, Ways});
-    {From, Ref, {jump_in, Mob}} ->
-        NewMobs = jump_in(Mob, Mobs),
+        loop({ID, Info, NewManifest, Ways});
+    {From, Ref, {load, Entity}} ->
+        NewManifest = accept(Entity, Manifest),
         From ! {Ref, ok},
-        loop({ID, Info, {NewMobs, Objs}, Ways});
-    {From, Ref, {vanish, Mob}} ->
-        NewMobs = vanish(Mob, Mobs),
+        loop({ID, Info, NewManifest, Ways});
+    {From, Ref, {drop, Entity}} ->
+        NewManifest = remove(Entity, Manifest),
         From ! {Ref, ok},
-        loop({ID, Info, {NewMobs, Objs}, Ways});
+        loop({ID, Info, NewManifest, Ways});
     {monitor, {way, WayID, WayPid}} ->
         NewLiveOut = monitor_exit(WayID, WayPid, LiveOut, Exits),
         loop({ID, Info, Manifest, {{LiveIn, NewLiveOut}, {Entrances, Exits}}});
@@ -100,10 +100,10 @@ loop(State = {ID,
     status ->
         note("Status:~n"
              "  ID: ~p~n  Name: ~p~n  Desc: ~p~n"
-             "  Mobiles: ~p~n  Objects: ~p~n"
+             "  Manifest: ~p~n"
              "  LiveIn: ~p~n  LiveOut: ~p~n"
              "  Entrances: ~p~n  Exits: ~p",
-             [ID, Name, Desc, Mobs, Objs, LiveIn, LiveOut, Entrances, Exits]),
+             [ID, Name, Desc, Manifest, LiveIn, LiveOut, Entrances, Exits]),
         loop(State);
     code_change ->
         ?MODULE:code_change(State);
@@ -116,57 +116,44 @@ loop(State = {ID,
   end.
 
 %% Request handlers
-look_at(Target, Mobs) ->
-    case lists:keyfind(Target, 1, Mobs) of
-        {Name, _, Desc} -> {mob, {Name, Desc}};
-        false           -> not_seen
-    end.
-
-echo(Origin, Sound, Mobs) ->
-    Event = {aural, {Origin, Sound}},
-    [MPid ! {observe, Event} || {_, MPid, _} <- Mobs].
-
-reflect(Origin, Sight, Mobs) ->
-    Event = {visual, {Origin, Sight}},
-    [MPid ! {observe, Event} || {_, MPid, _} <- Mobs].
-
-departure(Mob = {_, Pid, _}, ExitName, Mobs, LiveOut) ->
-    case lists:keyfind(ExitName, 1, LiveOut) of
-        {_, _, ExitPid, _} ->
-            unlink(Pid),
-            {{ok, ExitPid}, lists:delete(Mob, Mobs)};
-        false ->
-            {{error, noexit}, Mobs}
-    end.
-
-arrival(Mob = {MobName, MobPid, _}, {WayName, _, _}, Mobs, ID) ->
-    link(MobPid),
-    Sight = "arrives from the " ++ WayName,
-    reflect(MobName, Sight, Mobs),
-    {{ok, {ID, self()}}, [Mob | Mobs]}.
-
-rebound(Mob = {MobName, MobPid, _}, Mobs) ->
-    reflect(MobName, "couldn't get out.", lists:delete(Mob, Mobs)),
-    MobPid ! {observe, "You couldn't leave."},
+broadcast(Data, Manifest) ->
+    Pids = pids(Manifest),
+    em_lib:broadcast(Pids, Data),
     ok.
 
-jump_in(Mob = {MobName, MobPid, _}, Mobs) ->
-    link(MobPid),
-    reflect(MobName, "appears, as if by magic.", Mobs),
-    [Mob | Mobs].
+arbitrate(Target, Event, Manifest) ->
+    case lists:keyfind(Target, 1, Manifest) of
+        {_, Pid, _, Mod, _} -> Mod:incoming(Pid, Event);
+        false               -> {error, absent}
+    end.
 
-vanish(Mob = {MobName, MobPid, _}, Mobs) ->
-    unlink(MobPid),
-    NewMobs = lists:delete(Mob, Mobs),
-    reflect(MobName, "vanishes in a puff of smoke!", NewMobs),
-    NewMobs.
+arrival(Entity = {_, Pid, _, _, _}, Manifest, ID) ->
+    link(Pid),
+    {{ok, {ID, self()}}, [Entity | Manifest]}.
+
+departure(Entity = {_, Pid, _, _, _}, ExitName, Manifest, LiveOut) ->
+    case lists:keyfind(ExitName, 1, LiveOut) of
+        {_, {_, {OutName, _}}, ExitPid, _} ->
+            unlink(Pid),
+            {{ok, ExitPid, OutName}, lists:delete(Entity, Manifest)};
+        false ->
+            {{error, noexit}, Manifest}
+    end.
+
+accept(Entity = {_, Pid, _, _, _}, Manifest) ->
+    link(Pid),
+    [Entity | Manifest].
+
+remove(Entity = {_, Pid, _, _, _}, Manifest) ->
+    unlink(Pid),
+    lists:delete(Entity, Manifest).
 
 monitor_exit(WayID, WayPid, LiveOut, Exits) ->
     LiveOutIDs = [ID || {_, ID, _, _} <- LiveOut],
     case lists:member(WayID, Exits) and not lists:member(WayID, LiveOutIDs) of
         true ->
             Mon = monitor(process, WayPid),
-            [{way:name(WayID), WayID, WayPid, Mon} | LiveOut];
+            [{way:front(WayID), WayID, WayPid, Mon} | LiveOut];
         false ->
             LiveOut
     end.
@@ -179,6 +166,9 @@ handle_down(Message = {_, Ref, _, _, _}, LiveOut) ->
             note("Received ~p", [Message]),
             LiveOut
     end.
+
+%% Magic
+pids(Manifest) -> [Pid || {_, Pid, _, _, _} <- Manifest].
 
 %% Code changer
 code_change(State) ->

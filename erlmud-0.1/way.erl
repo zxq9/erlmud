@@ -1,17 +1,16 @@
 -module(way).
 -export([start_link/2,
-         name/1, in/1, out/1,
+         front/1, in/1, back/1, out/1,
          enter/2]).
 
 %% Type interface
-name({Name, _, _}) -> Name.
-
-in({_, In, _}) -> In.
-
-out({_, _, Out}) -> Out.
+front({{Name, _}, _}) -> Name.
+in({{_, InLoc}, _})   -> InLoc.
+back({_, {Name, _}})  -> Name.
+out({_, {_, OutLoc}}) -> OutLoc.
 
 %% Interface
-enter(WayPid, Mob) -> em_lib:call(WayPid, enter, Mob).
+enter(WayPid, Entity) -> em_lib:call(WayPid, enter, Entity).
 
 %% Startup
 start_link(Parent, Conf) ->
@@ -26,8 +25,8 @@ init(OutPid, WayID) ->
 %% Service
 open(State = {WayID, OutPid}) ->
   receive
-    {From, Ref, {enter, Mob}} ->
-        From ! {Ref, transit(Mob, OutPid, WayID)},
+    {From, Ref, {enter, Entity}} ->
+        From ! {Ref, transit(Entity, OutPid)},
         open(State);
     status ->
         note("Status:~n  Id: ~p~n  OutPid: ~p",
@@ -41,13 +40,14 @@ open(State = {WayID, OutPid}) ->
         open(State)
   end.
 
+%% Other states belong here.
 %closed(State) ->
 %locked(State) ->
 
 %% Request handlers
 % Alternate exit trickery and other conditional processing belongs here
-transit(Mob, OutPid, WayID) ->
-    loc:arrive(OutPid, Mob, WayID).
+transit(Entity, OutPid) ->
+    loc:arrive(OutPid, Entity).
 
 %% System
 note(String) ->

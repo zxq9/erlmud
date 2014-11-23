@@ -27,20 +27,19 @@ starter(Spawn, Parent, Conf) ->
             {ok, Pid}
     end.
 
-init(Parent, IlkMods) ->
+init(Parent, Conf) ->
     process_flag(trap_exit, true),
-    note("Initializing with ~p", [IlkMods]),
+    note("Initializing with ~p", [Conf]),
     Live = [],
-    Conf = [],
-    loop({Parent, IlkMods, Live, Conf}).
+    loop({Parent, Live, Conf}).
 
 %% Service
-loop(State = {Parent, IlkMods, Live, Conf}) ->
+loop(State = {Parent, Live, Conf}) ->
   receive
     {Controller, Ref, {spawn_minion, MobData}} ->
-        {MobPid, NewLive} = spawn_minion(Controller, MobData, IlkMods, Live),
+        {MobPid, NewLive} = spawn_minion(Controller, MobData, Live),
         Controller ! {Ref, MobPid},
-        loop({Parent, IlkMods, NewLive, Conf});
+        loop({Parent, NewLive, Conf});
     {From, Ref, {jump, {Mob, LocID}}} ->
         NewLoc = jump(Mob, LocID),
         From ! {Ref, NewLoc},
@@ -49,10 +48,10 @@ loop(State = {Parent, IlkMods, Live, Conf}) ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]);
     Message = {'EXIT', _, _} ->
         NewLive = handle_exit(Live, Message),
-        loop({Parent, IlkMods, NewLive, Conf});
+        loop({Parent, NewLive, Conf});
     status ->
-        note("Status:~n  Parent: ~p~n  IlkMods: ~p~n  Live: ~p~n  Conf: ~p",
-             [Parent, IlkMods, Live, Conf]),
+        note("Status:~n  Parent: ~p~n  Live: ~p~n  Conf: ~p",
+             [Parent, Live, Conf]),
         loop(State);
     code_change ->
         ?MODULE:code_change(State);
@@ -65,9 +64,8 @@ loop(State = {Parent, IlkMods, Live, Conf}) ->
   end.
 
 %% Controller calls
-spawn_minion(Controller, MobData = {_, {Ilk, _, _}}, IlkMods, Live) ->
-    Module = proplists:get_value(Ilk, IlkMods),
-    MobPid = Module:start_link(Controller, MobData),
+spawn_minion(Controller, MobData = {{_, _, Ilk, _, _, _}, _, _}, Live) ->
+    MobPid = mob:start_link(Controller, MobData),
     NewLive = [{MobPid, Ilk} | Live],
     {MobPid, NewLive}.
 
@@ -75,7 +73,7 @@ spawn_minion(Controller, MobData = {_, {Ilk, _, _}}, IlkMods, Live) ->
 jump(Mob, LocID) ->
     case locman:get_pid(LocID) of
         {ok, LocPid} ->
-            loc:mob_jump(LocPid, Mob),
+            loc:load(LocPid, Mob),
             {LocID, LocPid};
         {error, _} ->
             jump(Mob, default_loc(Mob))
@@ -95,7 +93,7 @@ handle_exit(Live, Message = {_, Pid, _}) ->
 default_loc(_) -> {0,0,0}.
 
 %% Code changer
-code_change(State = {_, _, Live, _}) ->
+code_change(State = {_, Live, _}) ->
     note("Changing code."),
     [MobPid ! code_change || {MobPid, _} <- Live],
     loop(State).

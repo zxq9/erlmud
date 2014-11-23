@@ -1,57 +1,71 @@
 -module(mob).
 -export([start_link/2, code_change/1,
-         get_actions/1]).
+         condition/1, incoming/2, get_actions/2]).
 
 %% Interface
+condition(MobPid) ->
+    em_lib:call(MobPid, condition).
 
-get_actions(MobPid) -> em_lib:call(MobPid, actions).
+incoming(MobPid, Event) ->
+    em_lib:call(MobPid, incoming, Event).
+
+get_actions(MobPid, Form) ->
+    em_lib:call(MobPid, actions, Form).
 
 %% Startup
 start_link(Con, Conf) ->
     spawn_link(fun() -> init(Con, Conf) end).
 
-init(ConPid, Conf = {Name, {Ilk, Desc, LastLocID}}) ->
+% Info = {Name, [Aliases], Ilk, Class, Desc, Sex}
+% Stat = {Condition = {Health = {CurHP, MaxHP}, Stamina = {CurSP, MaxSP}},
+%         Inventory = {{Weight, Equipped}, {Weight, Carried}},
+%         Effects   = [{Name, Magnitude}],
+%         Skills    = {Passive = [{PSkill, Proficiency}], Active = [{ASkill, Proficiency}]},
+%         Score     = {Level, Exp = {Point, Next}},
+%         Stats     = {Str, Int, Wil, Dex, Con, Speed, Agg, Chaos, Law},
+%   ...or change the internals with the Ilk
+init(ConPid, Conf = {Info = {Name, Aliases, Ilk, _, _, _}, LastStat, LastLocID}) ->
     note("Initializing with ~p", [Conf]),
     ConRef = monitor(process, ConPid),
-    Me = {Name, self(), Ilk},
-    locless(Me, {{ConPid, ConRef}, Name, Ilk, Desc}, LastLocID).
+    Me = {Name, self(), Aliases, ?MODULE, Ilk},
+    Con = {ConPid, ConRef},
+    locless(Me, {Con, Info, LastStat}, LastLocID).
 
-locless(Me, {Con, Name, Ilk, Desc}, none) ->
+locless(Me, {Con, Info, Stat}, none) ->
     Loc = mobman:relocate(Me, default),
-    enter_world({Con, Name, Ilk, Desc, Loc});
-locless(Me, {Con, Name, Ilk, Desc}, LastLocID) ->
+    enter_world({Con, Info, Stat, Loc});
+locless(Me, {Con, Info, Stat}, LastLocID) ->
     Loc = mobman:relocate(Me, LastLocID),
-    enter_world({Con, Name, Ilk, Desc, Loc}).
+    enter_world({Con, Info, Stat, Loc}).
 
-enter_world({Con = {ConPid, _}, Name, Ilk, Desc, Loc = {_, LocPid}}) ->
-    look(LocPid, ConPid),
-    loop({Con, Name, Ilk, Desc, Loc}).
+enter_world(State = {_, {Name, _, _, _, _, _}, _, {_, LocPid}}) ->
+    loc:event(LocPid, {observation, {10000, {warp, Name, success}}}),
+    self() ! {action, {unobservable, {look, []}}},
+    loop(State).
 
-loop(State = {Con = {ConPid, ConRef}, Name, Ilk, Desc, Loc}) ->
+loop(State = {{ConPid, ConRef}, {_, _, Ilk, _, _, _}, Stat, _}) ->
   receive
-    {From, Ref, short_stat} ->
-        SS = Name ++ " (* Healthy Fresh)",
-        From ! {Ref, SS},
+    {From, Ref, condition} ->
+        {Condition, _, _, _, _, _} = Stat,
+        From ! {Ref, Condition},
         loop(State);
-    {observe, Event} ->
-        ConPid ! {observation, Event},
-        loop(State);
-    {action, {Keyword, String}} ->
-        NewState = evaluate(Keyword, String, State),
+    {observation, {Magnitude, Event}} ->
+        NewState = Ilk:observe(Magnitude, Event, State),
         loop(NewState);
-    {From, Ref, actions} ->
-        From ! {Ref, actions()},
+    {action, {Nature, Data}} ->
+        NewState = Ilk:evaluate(Nature, Data, State),
+        loop(NewState);
+    {From, Ref, {incoming, Event}} ->
+        {Result, NewState} = Ilk:react(Event, State),
+        From ! {Ref, Result},
+        loop(NewState);
+    {From, Ref, {actions, Form}} ->
+        From ! {Ref, Ilk:actions(Form)},
         loop(State);
     {ConPid, divorce} ->
         divorce(State);
     Message = {'DOWN', ConRef, process, ConPid, _} ->
         con_down(Message, State);
-    status ->
-        note("Status:~n"
-             "  Controller: ~p~n  Name: ~p~n"
-             "  Ilk: ~p~n  Description: ~p~n  Loc: ~p",
-             [Con, Name, Ilk, Desc, Loc]),
-        loop(State);
     code_change ->
         ?MODULE:code_change(State);
     shutdown ->
@@ -62,79 +76,21 @@ loop(State = {Con = {ConPid, ConRef}, Name, Ilk, Desc, Loc}) ->
         loop(State)
   end.
 
-%% Action evaluation
-evaluate("say", String, State = {{_, _}, Name, _, _, {_, LocPid}}) ->
-    Origin = Name,
-    Sound = "says,\"" ++ String ++ "\"",
-    LocPid ! {audible, Origin, Sound},
-    State;
-evaluate("look", "", State = {{ConPid, _}, _, _, _, {_, LocPid}}) ->
-    look(LocPid, ConPid),
-    State;
-evaluate("look", String, State = {{ConPid, _}, _, _, _, {_, LocPid}}) ->
-    {Target, _} = head(String),
-    View = loc:look(LocPid, Target),
-    ConPid ! {look, target, View},
-    State;
-evaluate("go", String, {Con = {ConPid, _}, Name, Ilk, Desc, {_, LocPid}}) ->
-    {Target, _} = head(String),
-    Me = {Name, self(), Ilk},
-    NewLoc = depart(LocPid, Me, Target, ConPid),
-    {Con, Name, Ilk, Desc, NewLoc};
-evaluate(Keyword, String, State = {{ConPid, _}, Name, _, _, _}) ->
-    Message = io_lib:format("~p received {~p,~p}", [Name, Keyword, String]),
-    ConPid ! {notice, Message},
-    State.
-
-%% Action functions
-look(LocPid, ConPid) ->
-    View = loc:look(LocPid),
-    ConPid ! {look, loc, View},
-    ok.
-
-depart(LocPid, Me, Target, ConPid) ->
-    case loc:depart(LocPid, Me, Target) of
-        {ok, WayPid} ->
-            {ok, NewLoc = {_, NewLocPid}} = way:enter(WayPid, Me),
-            look(NewLocPid, ConPid),
-            NewLoc;
-        {error, noexit} ->
-            loc:bounce(LocPid, Me);
-        Res = {fail, _} ->
-            note("Received ~p from loc:depart/3", [Res]),
-            mobman:relocate(Me)
-    end.
-
 %% Magic
-actions() ->
-    [{"say", "Say something out loud."},
-     {"look", "View your surroundings."},
-     {"look Target", "Look at Target, if present."}].
-
-head(Line) ->
-    Stripped = string:strip(Line),
-    {Head, Tail} = head([], Stripped),
-    {lists:reverse(Head), Tail}.
-
-head(Word, []) ->
-    {Word, []};
-head(Word, [H|T]) ->
-    case H of
-        $\s -> {Word, T};
-        Z   -> head([Z|Word], T)
-    end.
-
-divorce(State = {_, Name, Ilk, _, {_, LocPid}}) ->
+divorce(State) ->
     note("Controller cut ties. Retiring."),
-    ok = loc:mob_vanish(LocPid, {Name, self(), Ilk}),
-    ok = charman:save(State).
+    retire(State).
 
-con_down(Message, State = {_, Name, Ilk, _, {_, LocPid}}) ->
+con_down(Message, State) ->
     note("Controller died with ~p~n  ...I'm dead.", [Message]),
-    ok = loc:mob_vanish(LocPid, {Name, self(), Ilk}),
-    ok = charman:save(State).
+    retire(State).
 %   NewState = spawn_controller(State),
 %   loop(NewState);
+
+retire({_, Info = {Name, Aliases, Ilk, _, _, _}, Stat, {LocID, LocPid}}) ->
+    loc:event(LocPid, {observation, {10000, {poof, Name, success}}}),
+    ok = loc:drop(LocPid, {Name, self(), Aliases, ?MODULE, Ilk}),
+    ok = charman:save({Name, {Info, Stat, LocID}}).
 
 %% Code changer
 code_change(State) ->

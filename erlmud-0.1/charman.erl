@@ -3,7 +3,7 @@
          save/1, list/1, load/2, make/2, drop/2]).
 
 %% Interface
-save(CharState) -> call(save, CharState).
+save(Char) -> call(save, Char).
 
 list(Acc) -> call(get_chars, Acc).
 
@@ -46,8 +46,8 @@ load_characters() -> dict:new().
 %% Service
 loop(State = {Parent, Conf, Accs, Chars}) ->
   receive
-    {From, Ref, {save, CharState}} ->
-        NewChars = remember(CharState, Chars),
+    {From, Ref, {save, Char}} ->
+        NewChars = remember(Char, Chars),
         From ! {Ref, ok},
         loop({Parent, Conf, Accs, NewChars});
     {From, Ref, {get_chars, Acc}} ->
@@ -83,8 +83,8 @@ loop(State = {Parent, Conf, Accs, Chars}) ->
   end.
 
 %% Registry functions
-remember({_, Name, Ilk, Desc, {LocID, _}}, Chars) ->
-    dict:store(Name, {Ilk, Desc, LocID}, Chars).
+remember({Name, Data}, Chars) ->
+    dict:store(Name, Data, Chars).
 
 get_chars(Acc, Accs) ->
     case dict:find(Acc, Accs) of
@@ -96,17 +96,17 @@ load_char(Accs, Chars, Acc, Name) ->
     case dict:find(Acc, Accs) of
         {ok, List} ->
             case lists:member(Name, List) of
-                true  -> {ok, {Name, dict:fetch(Name, Chars)}};
-                false -> {error, Name ++ " is not one of your characters."}
+                true  -> {ok, dict:fetch(Name, Chars)};
+                false -> {error, owner}
             end;
         error ->
-            {error, Name ++ " is not one of your characters."}
+            {error, owner}
     end.
 
 make_char(State = {Parent, Conf, Accs, Chars}, Acc, {Name, Data}) ->
     case dict:is_key(Name, Chars) of
         true  ->
-            Response = Name ++ " already exists.",
+            Response = {error, exists},
             {Response, State};
         false ->
             NewAccs = dict:append(Acc, Name, Accs),
@@ -123,11 +123,11 @@ drop_char(State = {Parent, Conf, Accs, Chars}, Acc, Name) ->
                     NewChars = dict:erase(Name, Chars),
                     {ok, {Parent, Conf, NewAccs, NewChars}};
                 false ->
-                    Response = Name ++ " is not one of your characters.",
+                    Response = {error, owner},
                     {Response, State}
             end;
         false ->
-            Response = Name ++ " is not one of your characters.",
+            Response = {error, owner},
             {Response, State}
     end.
 
