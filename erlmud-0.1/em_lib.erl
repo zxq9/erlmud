@@ -1,5 +1,6 @@
 -module(em_lib).
--export([note/3, broadcast/2, call/2, call/3]).
+-export([note/3, broadcast/2, call/2, call/3,
+         calc_weight/1, weight/1]).
 
 note(Module, String, Args) ->
     S = "~p ~p: " ++ String ++ "~n",
@@ -12,6 +13,13 @@ broadcast(Procs, Message) ->
 
 call(Proc, Verb, Data) ->
     call(Proc, {Verb, Data}).
+
+calc_weight(Entities) ->
+    SumWeight = fun(Entity, A) -> weight(Entity) + A end,
+    lists:foldl(SumWeight, 0, Entities).
+
+weight(Entity = {{Mod, _}, _}) ->
+    Mod:total_weight(Entity).
 
 %% Synchronous handler
 call(Proc, Request) ->

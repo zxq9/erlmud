@@ -216,7 +216,7 @@ help({_, _, []}) ->
 help({_, _, Actions}) ->
     Sys = sys_help(),
     Act = string:join([string:left(Command, 23) ++ "- " ++ Desc
-                       || {_, _, Command, Desc} <- Actions],
+                       || {_, _, _, Command, Desc} <- Actions],
                       "\r\n    "),
     string:join([Sys, Act], "    ").
 
@@ -377,21 +377,7 @@ charmake(State = {_, Handle, _, _, _}, String) ->
     {Message, State}.
 
 solicit_chardata(_, Name) ->
-    {Name,
-     {{Name,
-       ["human"],                   % Aliases
-       humanoid,                    % Ilk
-       "Wanderer",                  % Class
-       "Some description.",         % Description
-       "Male"},                     % Sex
-      {{{15, 30}, {30, 120}},       % Condition
-       {{0, []}, {0, []}},          % Inventory
-       [],                          % Effects
-       {{[], []}},                  % Skills
-       {1, 10},                     % Score
-       {100, 100, 100, 100, 100,    % Stats
-        100, 100, 100, 100}},
-      {0,0,0}}}.                    % Location
+    mob:new(Name, "human", "wanderer", "Lampas", "male").
 
 chardrop(State, []) ->
     {bargle(), State};
@@ -412,8 +398,8 @@ observe(Event, State) ->
             "You say,\"" ++ Line ++ "\"";
         {{say, Line}, Speaker, success} ->
             Speaker ++ " says,\"" ++ Line ++ "\"";
-        {status, self, Stat} ->
-            io_lib:format("Your stat: ~p", [Stat]);
+        {status, self, MobState} ->
+            render_status(MobState);
         {{arrive, Direction}, self, success} ->
             "You arrive from the " ++ Direction ++ ".";
         {{arrive, Direction}, Actor, success} ->
@@ -452,27 +438,50 @@ emit(Message, State) ->
     unprompted(Message, State),
     State.
 
+render_status(Mob) ->
+    {Str, Int, Wil, Dex, Con, Speed} = mob:read(stats, Mob),
+    {Moral, Chaos, Law} = mob:read(alignment, Mob),
+    {Level, Exp} = mob:read(score, Mob),
+    {{CurHP, MaxHP}, {CurSP, MaxSP}, {CurMP, MaxMP}} = mob:read(condition, Mob),
+    io_lib:format("You are ~s, a ~s ~s ~s.\r\n"
+                  "You are wearing ~p and carrying ~p.\r\n"
+                  "Stats     - STR: ~p INT: ~p WIL: ~p DEX: ~p CON: ~p SPD: ~p\r\n"
+                  "Alignment - Morality: ~p  Chaos: ~p Lawfulness: ~p\r\n"
+                  "Level:  ~p Experience: ~p\r\n"
+                  "Health: (~p/~p) Stamina: (~p/~p) Magika (~p/~p)",
+                  [mob:read(name, Mob), mob:read(sex, Mob),
+                   mob:read(ilk, Mob), mob:read(class, Mob),
+                   mob:read(worn_weight, Mob), mob:read(held_weight, Mob),
+                   Str, Int, Wil, Dex, Con, Speed,
+                   Moral, Chaos, Law,
+                   Level, Exp,
+                   CurHP, MaxHP, CurSP, MaxSP, CurMP, MaxMP]).
+
 prompt({_, Handle, _, {none, _, _}, _}) ->
     Handle ++ " $ ";
 prompt({_, _, _, {MPid, _, _}, _}) ->
-    {{CurHP, MaxHP}, {CurSP, MaxSP}} = mob:condition(MPid),
-    Health = case (CurHP div (MaxHP div 5)) of
+    {{CurHP, MaxHP}, {CurSP, MaxSP}, _} = mob:check_condition(MPid),
+    io_lib:format("(~s, ~s) $ ", [health(CurHP, MaxHP), stamina(CurSP, MaxSP)]).
+
+health(CurHP, MaxHP) ->
+    case (CurHP div (MaxHP div 5)) of
         5 -> "Healthy";
         4 -> "Scratched";
         3 -> "Bloodied";
         2 -> "Hurt";
         1 -> "Wounded";
         0 -> "Critical"
-    end,
-    Stamina = case (CurSP div (MaxSP div 5)) of
+    end.
+
+stamina(CurSP, MaxSP) ->
+    case (CurSP div (MaxSP div 5)) of
         5 -> "Fresh";
         4 -> "Strong";
         3 -> "Tiring";
         2 -> "Winded";
         1 -> "Haggard";
         0 -> "Bonked"
-    end,
-    "(" ++ Health ++ ", " ++ Stamina ++ ") $ ".
+    end.
 
 unprompted(Data, State = {Talker, _, _, _, _}) ->
     % TODO: Find a better way to clear the current line...

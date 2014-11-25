@@ -64,7 +64,9 @@ loop(State = {Parent, Live, Conf}) ->
   end.
 
 %% Controller calls
-spawn_minion(Controller, MobData = {{_, _, Ilk, _, _, _}, _, _}, Live) ->
+spawn_minion(Controller, MobData, Live) ->
+    {{Mod, _}, _} = MobData,
+    Ilk = Mod:read(ilk, MobData),
     MobPid = mob:start_link(Controller, MobData),
     NewLive = [{MobPid, Ilk} | Live],
     {MobPid, NewLive}.

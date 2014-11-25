@@ -1,36 +1,33 @@
 -module(humanoid).
 -export([observe/3, evaluate/3, react/2,
-         actions/1]).
+         level/1, actions/1, physique/3, capital/1]).
 
 % Interface
-observe(Magnitude,
-        {{Verb, Name}, Name, Outcome},
-        State = {{ConPid, _}, {Name, _, _, _, _, _}, _, _}) ->
-    case perceive(Magnitude, State) of
+observe(Magnitude, Event, State) ->
+    ConPid = mob:read(con_pid, State),
+    Name = mob:read(name, State),
+    perceive(Magnitude, Event, ConPid, Name, State).
+
+perceive(Magnitude, {{Verb, Name}, Name, Outcome}, ConPid, Name, State) ->
+    case detect(Magnitude, State) of
         true  -> ConPid ! {observation, {{Verb, self}, self, Outcome}};
         false -> ok
     end,
     State;
-observe(Magnitude,
-        {Action, Name, Outcome},
-        State = {{ConPid, _}, {Name, _, _, _, _, _}, _, _}) ->
-    case perceive(Magnitude, State) of
+perceive(Magnitude, {Action, Name, Outcome}, ConPid, Name, State) ->
+    case detect(Magnitude, State) of
         true  -> ConPid ! {observation, {Action, self, Outcome}};
         false -> ok
     end,
     State;
-observe(Magnitude,
-        {{Verb, Name}, Actor, Outcome},
-        State = {{ConPid, _}, {Name, _, _, _, _, _}, _, _}) ->
-    case perceive(Magnitude, State) of
+perceive(Magnitude, {{Verb, Name}, Actor, Outcome}, ConPid, Name, State) ->
+    case detect(Magnitude, State) of
         true  -> ConPid ! {observation, {{Verb, self}, Actor, Outcome}};
         false -> ok
     end,
     State;
-observe(Magnitude,
-        {Action, Actor, Outcome},
-        State = {{ConPid, _}, _, _, _}) ->
-    case perceive(Magnitude, State) of
+perceive(Magnitude, {Action, Actor, Outcome}, ConPid, _, State) ->
+    case detect(Magnitude, State) of
         true  -> ConPid ! {observation, {Action, Actor, Outcome}};
         false -> ok
     end,
@@ -41,28 +38,21 @@ evaluate(observable, {Verb, Data}, State) ->
 evaluate(unobservable, {Verb, Data}, State) ->
     unobservable(Verb, Data, State).
 
-react({glance, _}, State = {_, _, Stat, _}) ->
-    {{ok, Stat}, State};
+react({glance, _}, State) ->
+    Info = mob:read(info, State),
+    Status = mob:read(status, State),
+    {{ok, {Info, Status}}, State};
 react(Event, State) ->
     note("Received ~p", [Event]),
     {{ok, "You got me."}, State}.
 
-actions(text) ->
-    [{"go", go, observable,
-      "go Exit", "Move to a new location through Exit"},
-     {"say", say, observable,
-      "say Text", "Say something out loud"},
-     {"status", status, unobservable,
-      "status", "Check your character's current status"},
-     {"look", look, unobservable,
-      "look", "View your surroundings"},
-     {"glance", glance, observable,
-      "glance Target", "Look at Target"}].
-
 %% Magic
-perceive(Magnitude, _) -> Magnitude > 1.
+detect(Magnitude, _) -> Magnitude > 1.
 
-observable(glance, Data, State = {{ConPid, _}, {Name, _, _, _, _, _}, _, {_, LocPid}}) ->
+observable(glance, Data, State) ->
+    ConPid = mob:read(con_pid, State),
+    Name = mob:read(name, State),
+    LocPid = mob:read(loc_pid, State),
     case head(Data) of
         {Name, _} ->
             emit(LocPid, State, {glance, Name}, Name, failure);
@@ -76,15 +66,17 @@ observable(glance, Data, State = {{ConPid, _}, {Name, _, _, _, _, _}, _, {_, Loc
             end
     end,
     State;
-observable(say, Data, State = {_, {Name, _, _, _, _, _}, _, {_, LocPid}}) ->
+observable(say, Data, State) ->
+    Name = mob:read(name, State),
+    LocPid = mob:read(loc_pid, State),
     emit(LocPid, State, {say, Data}, Name, success),
     State;
-observable(go,
-           Data,
-           State = {Con = {ConPid, _},
-                    Info = {Name, Aliases, _, _, _, _},
-                    Status,
-                    Loc = {_, LocPid}}) ->
+observable(go, Data, State) ->
+    ConPid = mob:read(con_pid, State),
+    Name = mob:read(name, State),
+    Aliases = mob:read(aliases, State),
+    Loc = mob:read(loc, State),
+    LocPid = mob:read(loc_pid, State),
     {Target, _} = head(Data),
     Me = {Name, self(), Aliases, mob, ?MODULE},
     NewLoc = case go(Target, Me, LocPid) of
@@ -102,14 +94,14 @@ observable(go,
             emit(NewLocPid, State, jump, Name, success),
             New
     end,
-    {Con, Info, Status, NewLoc}.
+    mob:edit(loc, NewLoc, State).
 
-unobservable(look, _, State = {{ConPid, _}, _, _, {_, LocPid}}) ->
-    View = loc:look(LocPid),
-    ConPid ! {observation, {look, self, View}},
+unobservable(look, _, State) ->
+    View = loc:look(mob:read(loc_pid, State)),
+    mob:read(con_pid, State) ! {observation, {look, self, View}},
     State;
-unobservable(status, _, State = {{ConPid, _}, _, _, _}) ->
-    ConPid ! {observation, {status, self, State}},
+unobservable(status, _, State) ->
+    mob:read(con_pid, State) ! {observation, {status, self, State}},
     State.
 
 emit(LocPid, State, Action, Actor, Outcome) ->
@@ -129,6 +121,32 @@ go(Target, Me, LocPid) ->
             note("Received ~p from loc:depart/3", [Res]),
             {fail, mobman:relocate(Me)}
     end.
+
+%% Definitions
+
+level(Exp) ->
+    Levels = [1, 50, 100, 200, 400, 800, 1600],
+    length(lists:takewhile(fun(X) -> Exp > X end, Levels)).
+
+actions(text) ->
+    [{"go", go, observable,
+      "go Exit", "Move to a new location through Exit"},
+     {"say", say, observable,
+      "say Text", "Say something out loud"},
+     {"status", status, unobservable,
+      "status", "Check your character's current status"},
+     {"look", look, unobservable,
+      "look", "View your surroundings"},
+     {"glance", glance, observable,
+      "glance Target", "Look at Target"}].
+
+physique("human", "Lampas", "male") ->
+    {{185, 195}, {35, 35, 15}, {110, 110, 90, 90, 110, 100}};
+physique(_Species, _Homeland, _Sex) ->
+    {{175, 175}, {25, 20, 40}, {90, 90, 110, 110, 90, 100}}.
+
+capital("Lampas")  -> {1,0,0};
+capital(_Homeland) -> {0,0,0}.
 
 %% Binary & String handling
 head(Line) ->

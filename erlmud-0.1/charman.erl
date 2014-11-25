@@ -103,7 +103,9 @@ load_char(Accs, Chars, Acc, Name) ->
             {error, owner}
     end.
 
-make_char(State = {Parent, Conf, Accs, Chars}, Acc, {Name, Data}) ->
+make_char(State = {Parent, Conf, Accs, Chars}, Acc, Data) ->
+    {{Mod, _}, _} = Data,
+    Name = Mod:read(name, Data),
     case dict:is_key(Name, Chars) of
         true  ->
             Response = {error, exists},
