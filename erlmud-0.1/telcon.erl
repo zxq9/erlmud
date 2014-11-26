@@ -66,17 +66,17 @@ authenticate(Talker, Handle) ->
     end.
 
 init(Talker, Handle) ->
-    Minion = {none, none, init_actions(none, none)},
+    Minion = {none, none, none, init_actions(none)},
     Aliases = default_command_alias(),
     Channels = [],
     State = {Talker, Handle, Aliases, Minion, Channels},
     loop(State).
 
-init_actions(none, none)   -> [];
-init_actions(MobPid, Form) -> mob:get_actions(MobPid, Form).
+init_actions(none) -> [];
+init_actions(Ilk)  -> Ilk:actions().
 
 %% Service
-loop(State = {Talker, Handle, Aliases, Minion = {MPid, MRef, Actions}, Channels}) ->
+loop(State = {Talker, Handle, Aliases, Minion = {Ilk, MPid, MRef, Actions}, Channels}) ->
   receive
     {received, Bin} ->
         NewState = evaluate(Bin, State),
@@ -85,15 +85,18 @@ loop(State = {Talker, Handle, Aliases, Minion = {MPid, MRef, Actions}, Channels}
         handle_chat(Message, State),
         loop(State);
     {observation, Event} ->
-        observe(Event, State),
+        case Ilk of
+            none -> note("Received ~tp~n", [Event]);
+            Ilk  -> emit(Ilk:observe(Event), State)
+        end,
         loop(State);
     {system, Message} ->
         unprompted(Message, State),
         loop(State);
     {'DOWN', MRef, process, MPid, _Reason} ->
         unprompted("Your minion vanished in a puff of smoke!", State),
-        Actions = init_actions(none, none),
-        loop({Talker, Handle, Aliases, {none, none, Actions}, Channels});
+        Actions = init_actions(none),
+        loop({Talker, Handle, Aliases, {none, none, none, Actions}, Channels});
     Message = {'DOWN', _, process, _, _} ->
         NewState = handle_down(State, Message),
         loop(NewState);
@@ -133,9 +136,9 @@ interpret(Expansion, State = {_, _, _, Minion, Channels}) ->
         _       -> {perform(Keyword, Line, Minion), State}
     end.
 
-perform(_, _, {none, _, _}) ->
+perform(_, _, {none, _, _, _}) ->
     bargle();
-perform(Keyword, String, {MPid, _, Actions}) ->
+perform(Keyword, String, {_, MPid, _, Actions}) ->
     case lists:keyfind(Keyword, 1, Actions) of
         {_, Command, Nature, _, _} ->
             MPid ! {action, {Nature, {Command, String}}},
@@ -211,9 +214,9 @@ quit(Talker, Handle) ->
     Talker ! {send, Message},
     exit(quit).
 
-help({_, _, []}) ->
+help({_, _, _, []}) ->
     sys_help() ++ "    [None]";
-help({_, _, Actions}) ->
+help({_, _, _, Actions}) ->
     Sys = sys_help(),
     Act = string:join([string:left(Command, 23) ++ "- " ++ Desc
                        || {_, _, _, Command, Desc} <- Actions],
@@ -243,25 +246,19 @@ show(Channels) ->
                 Count =< 0 -> "[None]"
             end
         end,
-    Message =
-        "  Channels joined:\r\n    " ++
-        DisplayList(Mine) ++
-        "\r\n  Available channels:\r\n    " ++
-        DisplayList(NotMine),
-    Message.
+    io_lib:format("  Channels joined:\r\n    ~w\r\n"
+                  "  Available channels:\r\n    ~w",
+                  [DisplayList(Mine), DisplayList(NotMine)]).
 
 exam(Channel) ->
     case chanman:get_pid(Channel) of
         {ok, ChanPid} ->
             Handles = channel:handles(ChanPid),
             Count = length(Handles),
-            Message = 
-                Channel ++ ": " ++
-                integer_to_list(Count) ++ "\r\n    " ++
-                string:join(Handles, "\r\n    "),
-            Message;
+            io_lib:format("~w: ~p\r\n    ~w",
+                          [Channel, Count, string:join(Handles, "\r\n    ")]);
         {error, _}    ->
-            "Channel " ++ Channel ++ " does not exist."
+            io_lib:format("Channel ~w does not exist.", [Channel])
     end.
 
 join(State, []) ->
@@ -270,7 +267,7 @@ join(State = {Talker, Handle, Aliases, Minion, Channels}, String) ->
     {Channel, _} = chanhead(String),
     case lists:keymember(Channel, 1, Channels) of
         true ->
-            Response = "Already in " ++ Channel,
+            Response = io_lib:format("Already in ~w", [Channel]),
             {Response, State};
         false ->
             ChanPid = chanman:acquire(Channel),
@@ -293,7 +290,7 @@ leave(State = {Talker, Handle, Aliases, Minion, Channels}, String) ->
             NewState = {Talker, Handle, Aliases, Minion, NewChannels},
             {ok, NewState};
         false ->
-            Response = "You're not in " ++ Channel,
+            Response = io_lib:format("You're not in ~w", [Channel]),
             {Response, State}
     end.
 
@@ -304,7 +301,7 @@ chat(Channels, Line) ->
             Pid ! {chat, {self(), Message}},
             none;
         false ->
-            "You aren't in " ++ Channel
+            io_lib:format("You aren't in ~w", [Channel])
     end.
 
 chanhead(String) ->
@@ -336,17 +333,18 @@ charlist(State = {_, Handle, _, _, _}) ->
     Response = "  Your chars:\r\n    " ++ Mobs,
     {Response, State}.
 
-charload(State = {Talker, Handle, Aliases, {none, _, _}, Channels}, String) ->
+charload(State = {Talker, Handle, Aliases, {none, _, _, _}, Channels}, String) ->
     {Name, _} = head(String),
     case charman:load(Handle, Name) of
         {error, owner} ->
             Message = Name ++ " is not one of your characters.",
             {Message, State};
-        {ok, CharData} ->
+        {ok, CharData = {{Mod, _}, _}} ->
+            Ilk = (Mod:read(ilk, CharData)):con_ext(text),
             CharPid = mobman:spawn_minion(CharData),
             CharRef = monitor(process, CharPid),
-            Actions = init_actions(CharPid, text),
-            Minion = {CharPid, CharRef, Actions},
+            Actions = init_actions(Ilk),
+            Minion = {Ilk, CharPid, CharRef, Actions},
             NewState = {Talker, Handle, Aliases, Minion, Channels},
             Message = io_lib:format("Received chardata ~p.", [CharData]),
             {Message, NewState}
@@ -355,13 +353,13 @@ charload(State, _) ->
     Message = "You already control a character.",
     {Message, State}.
 
-charquit(State = {_, _, _, {none, _, _}, _}) ->
+charquit(State = {_, _, _, {none, _, _, _}, _}) ->
     Message = "No characters to unload.",
     {Message, State};
-charquit({Talker, Handle, Aliases, {CharPid, CharRef, _}, Channels}) ->
+charquit({Talker, Handle, Aliases, {_, CharPid, CharRef, _}, Channels}) ->
     demonitor(CharRef),
     CharPid ! {self(), divorce},
-    NewState = {Talker, Handle, Aliases, {none, none, []}, Channels},
+    NewState = {Talker, Handle, Aliases, {none, none, none, []}, Channels},
     Message = "You're such a quitter.",
     {Message, NewState}.
 
@@ -389,99 +387,13 @@ chardrop(State = {_, Handle, _, _}, String) ->
     end,
     {Message, State}.
 
-%% Semantic event -> text translation
-observe(Event, State) ->
-    Message = case Event of
-        {look, self, View} ->
-            io_lib:format("You see: ~p", [View]);
-        {{say, Line}, self, success} ->
-            "You say,\"" ++ Line ++ "\"";
-        {{say, Line}, Speaker, success} ->
-            Speaker ++ " says,\"" ++ Line ++ "\"";
-        {status, self, MobState} ->
-            render_status(MobState);
-        {{arrive, Direction}, self, success} ->
-            "You arrive from the " ++ Direction ++ ".";
-        {{arrive, Direction}, Actor, success} ->
-            Actor ++ " arrives from the " ++ Direction;
-        {{depart, Direction}, Actor, success} ->
-            Actor ++ " departs to the " ++ Direction;
-        {{glance, self}, self, _} ->
-            "Feeling a bit vain today?";
-        {{glance, Actor}, Actor, _} ->
-            Actor ++ " dreams of greatness.";
-        {{glance, _}, self, failure} ->
-            "That isn't here.";
-        {{glance, self}, Actor, success} ->
-            Actor ++ " glances at you.";
-        {{glance, _}, self, success} ->
-            silent;
-        {{glance, _}, self, View} ->
-            io_lib:format("~p", [View]);
-        {{glance, Target}, Actor, success} ->
-            Actor ++ " glances at " ++ Target;
-        {warp, self, _} ->
-            "You suddenly find yourself, existing.";
-        {warp, Actor, _} ->
-            "A quantum fluctuation suddenly manifests " ++ Actor ++ " nearby.";
-        {poof, Actor, _} ->
-            Actor ++ " disappears in a puff of smoke!";
-        {Action, Actor, Outcome} ->
-            note("Observed: ~p ~p ~p", [Action, Actor, Outcome]),
-            silent
-    end,
-    emit(Message, State).
+emit(silent, _)      -> ok;
+emit(Message, State) -> unprompted(Message, State).
 
-emit(silent, State) ->
-    State;
-emit(Message, State) ->
-    unprompted(Message, State),
-    State.
-
-render_status(Mob) ->
-    {Str, Int, Wil, Dex, Con, Speed} = mob:read(stats, Mob),
-    {Moral, Chaos, Law} = mob:read(alignment, Mob),
-    {Level, Exp} = mob:read(score, Mob),
-    {{CurHP, MaxHP}, {CurSP, MaxSP}, {CurMP, MaxMP}} = mob:read(condition, Mob),
-    io_lib:format("You are ~s, a ~s ~s ~s.\r\n"
-                  "You are wearing ~p and carrying ~p.\r\n"
-                  "Stats     - STR: ~p INT: ~p WIL: ~p DEX: ~p CON: ~p SPD: ~p\r\n"
-                  "Alignment - Morality: ~p  Chaos: ~p Lawfulness: ~p\r\n"
-                  "Level:  ~p Experience: ~p\r\n"
-                  "Health: (~p/~p) Stamina: (~p/~p) Magika (~p/~p)",
-                  [mob:read(name, Mob), mob:read(sex, Mob),
-                   mob:read(ilk, Mob), mob:read(class, Mob),
-                   mob:read(worn_weight, Mob), mob:read(held_weight, Mob),
-                   Str, Int, Wil, Dex, Con, Speed,
-                   Moral, Chaos, Law,
-                   Level, Exp,
-                   CurHP, MaxHP, CurSP, MaxSP, CurMP, MaxMP]).
-
-prompt({_, Handle, _, {none, _, _}, _}) ->
+prompt({_, Handle, _, {none, _, _, _}, _}) ->
     Handle ++ " $ ";
-prompt({_, _, _, {MPid, _, _}, _}) ->
-    {{CurHP, MaxHP}, {CurSP, MaxSP}, _} = mob:check_condition(MPid),
-    io_lib:format("(~s, ~s) $ ", [health(CurHP, MaxHP), stamina(CurSP, MaxSP)]).
-
-health(CurHP, MaxHP) ->
-    case (CurHP div (MaxHP div 5)) of
-        5 -> "Healthy";
-        4 -> "Scratched";
-        3 -> "Bloodied";
-        2 -> "Hurt";
-        1 -> "Wounded";
-        0 -> "Critical"
-    end.
-
-stamina(CurSP, MaxSP) ->
-    case (CurSP div (MaxSP div 5)) of
-        5 -> "Fresh";
-        4 -> "Strong";
-        3 -> "Tiring";
-        2 -> "Winded";
-        1 -> "Haggard";
-        0 -> "Bonked"
-    end.
+prompt({_, _, _, {Ilk, MPid, _, _}, _}) ->
+    Ilk:prompt(MPid).
 
 unprompted(Data, State = {Talker, _, _, _, _}) ->
     % TODO: Find a better way to clear the current line...

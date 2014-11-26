@@ -1,7 +1,7 @@
 -module(mob).
 -export([start_link/2, code_change/1,
          new/5, read/2, edit/3,
-         state/1, check_condition/1, check_weight/1, incoming/2, get_actions/2]).
+         state/1, check_condition/1, check_weight/1, incoming/2]).
 
 %% Type interface
 new(Name, Species, Class, Homeland, Sex) ->
@@ -188,9 +188,6 @@ check_weight(MobPid) ->
 incoming(MobPid, Event) ->
     em_lib:call(MobPid, incoming, Event).
 
-get_actions(MobPid, Form) ->
-    em_lib:call(MobPid, actions, Form).
-
 %% Startup
 start_link(Con, MobData) ->
     spawn_link(fun() -> init(Con, MobData) end).
@@ -238,10 +235,6 @@ loop(State) ->
         {Result, NewState} = Ilk:react(Event, State),
         From ! {Ref, Result},
         loop(NewState);
-    {From, Ref, {actions, Form}} ->
-        Ilk = read(ilk, State),
-        From ! {Ref, Ilk:actions(Form)},
-        loop(State);
     {ConPid, divorce} ->
         divorce(State);
     Message = {'DOWN', ConRef, process, ConPid, _} ->
@@ -258,9 +251,9 @@ loop(State) ->
 
 %% Magic
 resolve_species("human", "male") ->
-    {humanoid, ["human", "man"], "A man"};
+    {mob_humanoid, ["human", "man"], "A man"};
 resolve_species("human", "female") ->
-    {humanoid, ["human", "woman"], "A woman"}.
+    {mob_humanoid, ["human", "woman"], "A woman"}.
 
 divorce(State) ->
     note("Controller cut ties. Retiring."),

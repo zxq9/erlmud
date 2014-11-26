@@ -1,8 +1,9 @@
--module(humanoid).
+-module(mob_humanoid).
 -export([observe/3, evaluate/3, react/2,
-         level/1, actions/1, physique/3, capital/1]).
+         level/1, physique/3, capital/1,
+         con_ext/1]).
 
-% Interface
+%% Interface
 observe(Magnitude, Event, State) ->
     ConPid = mob:read(con_pid, State),
     Name = mob:read(name, State),
@@ -45,6 +46,8 @@ react({glance, _}, State) ->
 react(Event, State) ->
     note("Received ~p", [Event]),
     {{ok, "You got me."}, State}.
+
+con_ext(text) -> telcon_humanoid.
 
 %% Magic
 detect(Magnitude, _) -> Magnitude > 1.
@@ -127,18 +130,6 @@ go(Target, Me, LocPid) ->
 level(Exp) ->
     Levels = [1, 50, 100, 200, 400, 800, 1600],
     length(lists:takewhile(fun(X) -> Exp > X end, Levels)).
-
-actions(text) ->
-    [{"go", go, observable,
-      "go Exit", "Move to a new location through Exit"},
-     {"say", say, observable,
-      "say Text", "Say something out loud"},
-     {"status", status, unobservable,
-      "status", "Check your character's current status"},
-     {"look", look, unobservable,
-      "look", "View your surroundings"},
-     {"glance", glance, observable,
-      "glance Target", "Look at Target"}].
 
 physique("human", "Lampas", "male") ->
     {{185, 195}, {35, 35, 15}, {110, 110, 90, 90, 110, 100}};
