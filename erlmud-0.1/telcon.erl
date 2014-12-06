@@ -1,5 +1,13 @@
 -module(telcon).
--export([start_link/1, code_change/1]).
+-export([start_link/1, code_change/1,
+         black/1,  dk_gray/1,
+         red/1,    lt_red/1,
+         green/1,  lt_green/1,
+         brown/1,  yellow/1,
+         blue/1,   lt_blue/1,
+         purple/1, lt_purple/1,
+         cyan/1,   lt_cyan/1,
+         gray/1,   white/1]).
 
 %% Startup
 start_link(Talker) ->
@@ -148,7 +156,7 @@ perform(Keyword, String, {_, MPid, _, Actions}) ->
     end.
 
 handle_chat(Message, State) ->
-    unprompted(Message, State).
+    unprompted(cyan(Message), State).
 
 %% Binary & string handling
 rewrite([], _) -> [];
@@ -215,10 +223,10 @@ quit(Talker, Handle) ->
     exit(quit).
 
 help({_, _, _, []}) ->
-    sys_help() ++ "    [None]";
+    sys_help() ++ gray("    [None]");
 help({_, _, _, Actions}) ->
     Sys = sys_help(),
-    Act = string:join([string:left(Command, 23) ++ "- " ++ Desc
+    Act = string:join([string:left(yellow(Command), 23) ++ gray("- " ++ Desc)
                        || {_, _, _, Command, Desc} <- Actions],
                       "\r\n    "),
     string:join([Sys, Act], "    ").
@@ -246,8 +254,10 @@ show(Channels) ->
                 Count =< 0 -> "[None]"
             end
         end,
-    io_lib:format("  Channels joined:\r\n    ~w\r\n"
-                  "  Available channels:\r\n    ~w",
+    io_lib:format(white("  Channels joined:\r\n") ++
+                  cyan("    ~ts\r\n") ++
+                  white("  Available channels:\r\n") ++
+                  cyan("    ~ts"),
                   [DisplayList(Mine), DisplayList(NotMine)]).
 
 exam(Channel) ->
@@ -423,9 +433,9 @@ emit(silent, _)      -> ok;
 emit(Message, State) -> unprompted(Message, State).
 
 prompt({_, Handle, _, {none, _, _, _}, _}) ->
-    Handle ++ " $ ";
+    gray(Handle ++ " $ ");
 prompt({_, _, _, {Ilk, MPid, _, _}, _}) ->
-    Ilk:prompt(MPid).
+    gray(Ilk:prompt(MPid)).
 
 unprompted(Data, State = {Talker, _, _, _, _}) ->
     % TODO: Find a better way to clear the current line...
@@ -434,48 +444,49 @@ unprompted(Data, State = {Talker, _, _, _, _}) ->
     Talker ! {send, Message}.
 
 greet() ->
-    "\r\nWelcome to ErlMUD\r\n\r\n"
-    "By what name do you wish to be known?\r\n"
-    "$ ".
+    white("\r\nWelcome to ErlMUD\r\n\r\n") ++
+    gray("By what name do you wish to be known?\r\n"
+         "$ ").
 
 sys_help() ->
-    "  Available commands:\r\n"
-    "    chat Channel Text      - Send Text to everyone in Channel\r\n"
-    "    sys Command [Args]     - Execute system Command\r\n"
-    "    help                   - Display this message\r\n"
-    "  Command is one of:\r\n"
-    "    char [Args]            - Invoke character commands\r\n"
-    "    chan [Args]            - Invoke channel commands\r\n"
-    "    alias [Args]           - Invoke alias commands\r\n"
-    "    echo Text              - Echo Text back to your terminal\r\n"
-    "    quit                   - Disconnect abruptly\r\n"
-    "\r\n"
-    "  Character commands:\r\n"
-    "    list OR (nothing)      - List your characters\r\n"
-    "    CharacterName          - Display character status\r\n"
-    "    load Name              - Take control of character\r\n"
-    "    quit                   - Release control of current chatacter\r\n"
-    "    make Name              - Create a new character\r\n"
-    "\r\n"
-    "  Channel commands:\r\n"
-    "    list OR (nothing)      - List system chat channels\r\n"
-    "    ChannelName            - Display user count and handle list of ChannelName\r\n"
-    "    join Channel           - Join or create the named Channel\r\n"
-    "    leave Channel          - Leave the named Channel (and close if last member)\r\n"
-    "\r\n"
-    "  Alias commands:\r\n"
-    "    list OR (nothing)      - List current command aliases\r\n"
-    "    Alias Text             - Set Alias to Text\r\n"
-    "    clear                  - Clear all aliases\r\n"
-    "    clear Alias            - Clear Alias\r\n"
-    "    default                - Reset aliases to default\r\n"
-    "\r\n"
-    "  Shortcuts:\r\n"
-    "    !Channel Text      OR   chat Channel Text\r\n"
-    "    /Command [Args]    OR   sys Command [Args]\r\n"
-    "    ?                  OR   help\r\n"
-    "\r\n"
-    "  Available Actions:\r\n".
+    white("  Available commands:\r\n") ++
+    gray("    chat Channel Text      - Send Text to everyone in Channel\r\n"
+         "    sys Command [Args]     - Execute system Command\r\n"
+         "    help                   - Display this message\r\n"
+         "\r\n") ++
+    white("  Command is one of:\r\n") ++
+    gray("    char [Args]            - Invoke character commands\r\n"
+         "    chan [Args]            - Invoke channel commands\r\n"
+         "    alias [Args]           - Invoke alias commands\r\n"
+         "    echo Text              - Echo Text back to your terminal\r\n"
+         "    quit                   - Disconnect abruptly\r\n"
+         "\r\n") ++
+    white("  Character commands:\r\n") ++
+    gray("    list OR (nothing)      - List your characters\r\n"
+         "    CharacterName          - Display character status\r\n"
+         "    load Name              - Take control of character\r\n"
+         "    quit                   - Release control of current chatacter\r\n"
+         "    make Name              - Create a new character\r\n"
+         "\r\n") ++
+    white("  Channel commands:\r\n") ++
+    gray("    list OR (nothing)      - List system chat channels\r\n"
+         "    ChannelName            - Display user count and handle list\r\n"
+         "    join Channel           - Join or create the named Channel\r\n"
+         "    leave Channel          - Leave the named Channel\r\n"
+         "\r\n") ++
+    white("  Alias commands:\r\n") ++
+    gray("    list OR (nothing)      - List current command aliases\r\n"
+         "    Alias Text             - Set Alias to Text\r\n"
+         "    clear                  - Clear all aliases\r\n"
+         "    clear Alias            - Clear Alias\r\n"
+         "    default                - Reset aliases to default\r\n"
+         "\r\n") ++
+    white("  Shortcuts:\r\n") ++
+    gray("    !Channel Text      OR   chat Channel Text\r\n"
+         "    /Command [Args]    OR   sys Command [Args]\r\n"
+         "    ?                  OR   help\r\n"
+         "\r\n") ++
+    white("  Available Actions:\r\n").
 
 %% Handler
 handle_down(State = {Talker, Handle, Minion, Channels},
@@ -490,6 +501,23 @@ handle_down(State = {Talker, Handle, Minion, Channels},
             note("Received ~p", [Message]),
             State
     end.
+
+black(String)     -> [27,91,48,48,59,51,48,109] ++ String.
+dk_gray(String)   -> [27,91,48,49,59,51,48,109] ++ String.
+red(String)       -> [27,91,48,48,59,51,49,109] ++ String.
+lt_red(String)    -> [27,91,48,49,59,51,49,109] ++ String.
+green(String)     -> [27,91,48,48,59,51,50,109] ++ String.
+lt_green(String)  -> [27,91,48,49,59,51,50,109] ++ String.
+brown(String)     -> [27,91,48,48,59,51,51,109] ++ String.
+yellow(String)    -> [27,91,48,49,59,51,51,109] ++ String.
+blue(String)      -> [27,91,48,48,59,51,52,109] ++ String.
+lt_blue(String)   -> [27,91,48,48,59,51,52,109] ++ String.
+purple(String)    -> [27,91,48,48,59,51,53,109] ++ String.
+lt_purple(String) -> [27,91,48,49,59,51,53,109] ++ String.
+cyan(String)      -> [27,91,48,48,59,51,54,109] ++ String.
+lt_cyan(String)   -> [27,91,48,49,59,51,54,109] ++ String.
+gray(String)      -> [27,91,48,48,59,51,55,109] ++ String.
+white(String)     -> [27,91,48,49,59,51,55,109] ++ String.
 
 %% Code changer
 code_change(State) ->

@@ -33,7 +33,7 @@ observe(Event, Minion) ->
         {{glance, _}, self, success} ->
             silent;
         {{glance, _}, self, View} ->
-            io_lib:format("~p", [View]);
+            render_glance(View);
         {{glance, Target}, Actor, success} ->
             Actor ++ " glances at " ++ Target;
         {warp, self, _} ->
@@ -50,7 +50,11 @@ observe(Event, Minion) ->
 render_location({_, {Name, Description}, Inventory, {{_, Exits}, _}}, {_, MPid, _, _}) ->
     ExitNames = string:join([N || {N, _, _, _} <- Exits], " "),
     Stuff = string:join(render_inventory(MPid, Inventory), "\r\n"),
-    io_lib:format("~ts\r\n~ts\r\n[ obvious exits: ~ts ]\r\n~ts",
+    io_lib:format(telcon:cyan("~ts\r\n") ++
+                  telcon:gray("~ts\r\n[ obvious exits:") ++
+                  telcon:white(" ~ts ") ++
+                  telcon:gray("]\r\n") ++
+                  telcon:green("~ts"),
                   [Name, Description, ExitNames, Stuff]).
 
 render_inventory(MPid, List) ->
@@ -83,6 +87,9 @@ render_status(Mob) ->
                    Moral, Chaos, Law,
                    Level, Exp,
                    CurHP, MaxHP, CurSP, MaxSP, CurMP, MaxMP]).
+
+render_glance(View) ->
+    io_lib:format("~p", [View]).
 
 prompt(Pid) ->
     {HP, SP, MP} = mob:check_condition(Pid),
