@@ -57,6 +57,9 @@ accepting(Parent, PortNum, Connections, Port, Listener) ->
     Message = {'EXIT', _, _} ->
         NewConnections = handle_exit(Message, Connections),
         accepting(Parent, PortNum, NewConnections, Port, Listener);
+    {monitor, Pid} ->
+        monitor(process, Pid),
+        accepting(Parent, PortNum, Connections, Port, Listener);
     code_change ->
         ?MODULE:code_change(accepting,
                             {Parent, PortNum, Connections, Port},

@@ -7,6 +7,7 @@ start_link(Server, Socket) ->
 
 init(Server, Socket) ->
     Telcon = telcon:start_link(self()),
+    telnet ! {monitor, Telcon},
     talk(Server, Socket, Telcon).
 
 %% Service

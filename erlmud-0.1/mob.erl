@@ -1,14 +1,16 @@
 -module(mob).
 -export([start_link/2, code_change/1,
-         new/5, read/2, edit/3,
-         state/1, check_condition/1, check_weight/1, incoming/2]).
+         new/1, new/2, read/2, edit/3,
+         state/1, check_condition/1, check_weight/1, incoming/2,
+         roll/2, reroll/2, shift/2, adjust/2, topoff/1]).
 
 %% Type interface
-new(Name, Species, Class, Homeland, Sex) ->
+new(Name) ->
     DOB = calendar:universal_time(),
-    {Ilk, Aliases, Description} = resolve_species(Species, Sex),
+    {Ilk, Aliases, Description} = {none, [], ""},
+    {Species, Class, Homeland, Sex} = {"mob", "mob", "mob", "mob"},
     {{Height, Weight}, {BaseHP, BaseSP, BaseMP}, Stats} =
-        Ilk:physique(Species, Homeland, Sex),
+        {{1, 1}, {1, 1, 1}, {1, 1, 1, 1, 1, 1}},
     Alignment = {0, 0, 0}, % {Morality, Chaos, Law}
     Condition = {{BaseHP, BaseHP}, {BaseSP, BaseSP}, {BaseMP, BaseMP}},
     Worn = [],
@@ -23,7 +25,7 @@ new(Name, Species, Class, Homeland, Sex) ->
     Level = 1,
     Exp = 1,
     Score = {Level, Exp},
-    Location = Ilk:capital(Homeland),
+    Location = {0, 0, 0},
     {{?MODULE,0},
      {{none, none},
       {Name, Aliases},
@@ -31,9 +33,12 @@ new(Name, Species, Class, Homeland, Sex) ->
       {Description, Condition, Inventory, Effects, Skills, Score, Alignment},
       {Location, none}}}.
 
-read(con, {_, {Con, _, _, _, _}}) -> Con;
-read(con_pid, Mob) -> element(1, read(con, Mob));
-read(con_ref, Mob) -> element(2, read(con, Mob));
+new(Name, Data) ->
+    adjust(mob:new(Name), Data).
+
+read(controller, {_, {Con, _, _, _, _}}) -> Con;
+read(con_pid, Mob) -> element(1, read(controller, Mob));
+read(con_ref, Mob) -> element(2, read(controller, Mob));
 
 read(names, {_, {_, Names, _, _, _}}) -> Names;
 read(name, Mob)    -> element(1, read(names, Mob));
@@ -103,18 +108,47 @@ read(loc, {_, {_, _, _, _, Loc}}) -> Loc;
 read(loc_id, Mob)  -> element(1, read(loc, Mob));
 read(loc_pid, Mob) -> element(2, read(loc, Mob)).
 
-edit(con, ConPid, {Type, {_, Names, Info, Status, Loc}}) ->
+edit(controller, ConPid, {Type, {_, Names, Info, Status, Loc}}) ->
     ConRef = monitor(process, ConPid),
     {Type, {{ConPid, ConRef}, Names, Info, Status, Loc}};
 edit(names, Names, {Type, {Con, _, Info, Status, Loc}}) ->
     {Type, {Con, Names, Info, Status, Loc}};
 edit(name, Name, Mob) ->
     edit(names, {Name, read(aliases, Mob)}, Mob);
+edit(aliases, Aliases, Mob) ->
+    edit(names, {read(name, Mob), Aliases}, Mob);
 edit(info, Info, {Type, {Con, Names, _, Status, Loc}}) ->
     {Type, {Con, Names, Info, Status, Loc}};
+edit(ilk, Ilk, Mob) ->
+    edit(info, setelement(1, read(info, Mob), Ilk), Mob);
+edit(species, Species, Mob) ->
+    edit(info, setelement(2, read(info, Mob), Species), Mob);
+edit(class, Class, Mob) ->
+    edit(info, setelement(3, read(info, Mob), Class), Mob);
+edit(homeland, Homeland, Mob) ->
+    edit(info, setelement(4, read(info, Mob), Homeland), Mob);
+edit(dob, DOB, Mob) ->
+    edit(info, setelement(5, read(info, Mob), DOB), Mob);
+edit(height, Height, Mob) ->
+    edit(info, setelement(6, read(info, Mob), Height), Mob);
+edit(weight, Weight, Mob) ->
+    edit(info, setelement(7, read(info, Mob), Weight), Mob);
+edit(sex, Sex, Mob) ->
+    edit(info, setelement(8, read(info, Mob), Sex), Mob);
 edit(stats, Stats, Mob) ->
-    {Ilk, Spec, Cl, HL, DOB, Height, Weight, Sex, _} = read(info, Mob),
-    edit(info, {Ilk, Spec, Cl, HL, DOB, Height, Weight, Sex, Stats}, Mob);
+    edit(info, setelement(9, read(info, Mob), Stats), Mob);
+edit(str, Str, Mob) ->
+    edit(stats, setelement(1, read(stats, Mob), Str), Mob);
+edit(int, Int, Mob) ->
+    edit(stats, setelement(2, read(stats, Mob), Int), Mob);
+edit(wil, Wil, Mob) ->
+    edit(stats, setelement(3, read(stats, Mob), Wil), Mob);
+edit(dex, Dex, Mob) ->
+    edit(stats, setelement(4, read(stats, Mob), Dex), Mob);
+edit(con, Con, Mob) ->
+    edit(stats, setelement(5, read(stats, Mob), Con), Mob);
+edit(spd, Spd, Mob) ->
+    edit(stats, setelement(6, read(stats, Mob), Spd), Mob);
 edit(status, Status, {Type, {Con, Names, Info, _, Loc}}) ->
     {Type, {Con, Names, Info, Status, Loc}};
 edit(description, Desc, Mob) ->
@@ -170,10 +204,17 @@ edit(exp, Amount, Mob) ->
     Level = Ilk:level(Exp),
     edit(score, {Level, Exp}, Mob);
 edit(alignment, Align, Mob) ->
-    {Desc, Condition, Inv, Eff, Sk, Sc, _} = read(status, Mob),
-    edit(status, {Desc, Condition, Inv, Eff, Sk, Sc, Align}, Mob);
+    edit(status, setelement(7, read(status, Mob), Align), Mob);
+edit(morality, Moral, Mob) ->
+    edit(alignment, setelement(1, read(alignment, Mob), Moral), Mob);
+edit(chaos, Chaos, Mob) ->
+    edit(alignment, setelement(2, read(alignment, Mob), Chaos), Mob);
+edit(law, Law, Mob) ->
+    edit(alignment, setelement(3, read(alignment, Mob), Law), Mob);
 edit(loc, Loc, {Type, {Con, Names, Info, Status, _}}) ->
-    {Type, {Con, Names, Info, Status, Loc}}.
+    {Type, {Con, Names, Info, Status, Loc}};
+edit(loc_id, LocID, Mob) ->
+    edit(loc, setelement(1, read(loc, Mob), LocID), Mob).
 
 %% Interface
 state(MPid) ->
@@ -188,6 +229,45 @@ check_weight(MobPid) ->
 incoming(MobPid, Event) ->
     em_lib:call(MobPid, incoming, Event).
 
+roll(Name, Influences) ->
+    new(Name, resolve(Influences)).
+
+reroll(Mob, Influences) ->
+    adjust(resolve(Influences), Mob).
+
+shift(Mob, Influences) ->
+    tweak(Mob, resolve(Influences)).
+
+tweak(Mob, []) ->
+    Mob;
+tweak(Mob, [{aliases, List} | Influences]) ->
+    tweak(edit(aliases, lists:append(List, read(aliases, Mob)), Mob), Influences);
+tweak(Mob, [{Key, Magnitude} | Influences]) ->
+    tweak(edit(Key, (read(Key, Mob) + Magnitude), Mob), Influences).
+
+resolve(Influences) ->
+    resolve([], lists:flatten(Influences)).
+
+resolve(Data, []) ->
+    Data;
+resolve(Data, [{Key, {Min, Mean, Max}} | Influences]) ->
+    resolve([{Key, em_lib:roll(Min, Mean, Max)} | Data], Influences);
+resolve(Data, [I | Influences]) ->
+    resolve([I | Data], Influences).
+
+adjust(Mob, []) ->
+    Mob;
+adjust(Mob, [{aliases, List} | Influences]) ->
+    adjust(edit(aliases, lists:append(List, read(aliases, Mob)), Mob), Influences);
+adjust(Mob, [{Key, Value} | Data]) ->
+    adjust(edit(Key, Value, Mob), Data).
+
+topoff(Mob) ->
+    MaxHP = read(max_hp, Mob),
+    MaxSP = read(max_sp, Mob),
+    MaxMP = read(max_mp, Mob),
+    edit(condition, {{MaxHP, MaxHP}, {MaxSP, MaxSP}, {MaxMP, MaxMP}}, Mob).
+
 %% Startup
 start_link(Con, MobData) ->
     spawn_link(fun() -> init(Con, MobData) end).
@@ -195,7 +275,7 @@ start_link(Con, MobData) ->
 init(ConPid, MobData) ->
     note("Initializing with ~p", [MobData]),
     Me = {read(name, MobData), self(), read(aliases, MobData), ?MODULE, read(ilk, MobData)},
-    locless(Me, edit(con, ConPid, MobData)).
+    locless(Me, edit(controller, ConPid, MobData)).
 
 locless(Me, MobData) ->
     Oriented = case read(loc, MobData) of
@@ -211,7 +291,7 @@ enter_world(State) ->
     loop(State).
 
 loop(State) ->
-    {ConPid, ConRef} = read(con, State),
+    {ConPid, ConRef} = read(controller, State),
   receive
     {From, Ref, check_condition} ->
         From ! {Ref, read(condition, State)},
@@ -250,11 +330,6 @@ loop(State) ->
   end.
 
 %% Magic
-resolve_species("human", "male") ->
-    {mob_humanoid, ["human", "man"], "A man"};
-resolve_species("human", "female") ->
-    {mob_humanoid, ["human", "woman"], "A woman"}.
-
 divorce(State) ->
     note("Controller cut ties. Retiring."),
     retire(State).

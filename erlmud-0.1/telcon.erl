@@ -67,7 +67,7 @@ authenticate(Talker, Handle) ->
 
 init(Talker, Handle) ->
     Minion = {none, none, none, init_actions(none)},
-    Aliases = default_command_alias(),
+    Aliases = [],
     Channels = [],
     State = {Talker, Handle, Aliases, Minion, Channels},
     loop(State).
@@ -87,7 +87,7 @@ loop(State = {Talker, Handle, Aliases, Minion = {Ilk, MPid, MRef, Actions}, Chan
     {observation, Event} ->
         case Ilk of
             none -> note("Received ~tp~n", [Event]);
-            Ilk  -> emit(Ilk:observe(Event), State)
+            Ilk  -> emit(Ilk:observe(Event, Minion), State)
         end,
         loop(State);
     {system, Message} ->
@@ -333,7 +333,7 @@ charlist(State = {_, Handle, _, _, _}) ->
     Response = "  Your chars:\r\n    " ++ Mobs,
     {Response, State}.
 
-charload(State = {Talker, Handle, Aliases, {none, _, _, _}, Channels}, String) ->
+charload(State = {Talker, Handle, _, {none, _, _, _}, Channels}, String) ->
     {Name, _} = head(String),
     case charman:load(Handle, Name) of
         {error, owner} ->
@@ -345,8 +345,9 @@ charload(State = {Talker, Handle, Aliases, {none, _, _, _}, Channels}, String) -
             CharRef = monitor(process, CharPid),
             Actions = init_actions(Ilk),
             Minion = {Ilk, CharPid, CharRef, Actions},
-            NewState = {Talker, Handle, Aliases, Minion, Channels},
-            Message = io_lib:format("Received chardata ~p.", [CharData]),
+            NewAliases = Ilk:alias(),
+            NewState = {Talker, Handle, NewAliases, Minion, Channels},
+            Message = "A new reality grips you...",
             {Message, NewState}
     end;
 charload(State, _) ->
@@ -356,10 +357,10 @@ charload(State, _) ->
 charquit(State = {_, _, _, {none, _, _, _}, _}) ->
     Message = "No characters to unload.",
     {Message, State};
-charquit({Talker, Handle, Aliases, {_, CharPid, CharRef, _}, Channels}) ->
+charquit({Talker, Handle, _, {_, CharPid, CharRef, _}, Channels}) ->
     demonitor(CharRef),
     CharPid ! {self(), divorce},
-    NewState = {Talker, Handle, Aliases, {none, none, none, []}, Channels},
+    NewState = {Talker, Handle, [], {none, none, none, []}, Channels},
     Message = "You're such a quitter.",
     {Message, NewState}.
 
@@ -367,15 +368,22 @@ charmake(State, []) ->
     {bargle(), State};
 charmake(State = {_, Handle, _, _, _}, String) ->
     {Name, _} = head(String),
-    Char = solicit_chardata(State, Name),
+    Char = {Name, none},
     Message = case charman:make(Handle, Char) of
-        ok              -> Name ++ " created.";
+        ok              -> charcreate(Name, State);
         {error, exists} -> "That name is already taken!"
     end,
     {Message, State}.
 
-solicit_chardata(_, Name) ->
-    mob:new(Name, "human", "wanderer", "Lampas", "male").
+charcreate(Name, State) ->
+    {SpecName, SpecMod} = ask_species(State),
+    SpecCon = SpecMod:con_ext(text),
+    Char = SpecCon:solicit_char(Name, SpecName, fun pickone/3, State),
+    charman:save({mob:read(name, Char), Char}),
+    io_lib:format("~ts created.", [Name]).
+
+ask_species(State) ->
+    pickone("What species?", mobman:species_index(), State).
 
 chardrop(State, []) ->
     {bargle(), State};
@@ -386,6 +394,30 @@ chardrop(State = {_, Handle, _, _}, String) ->
         {error, owner} -> Name ++ " is not one of your characters!"
     end,
     {Message, State}.
+
+%% Magic
+pickone(Question, Index, State) ->
+    pickone(Question, Index, fun unprompted/2, State).
+
+pickone(Question, Index, Speaker, State = {Talker, _, _, _, _}) ->
+    {Menu, Opts} = menufy(Index),
+    UserQuery = io_lib:format("~ts\r\n~ts\r\n $", [Question, Menu]),
+    Talker ! {send, UserQuery},
+    Choice = receive {received, Bin} -> topline(Bin) end,
+    case proplists:lookup(Choice, Opts) of
+        none ->
+            Speaker("That's not an option. Typo? Try again.", State),
+            pickone(Question, Index, State);
+        {_, Name} ->
+            proplists:lookup(Name, Index)
+    end.
+
+menufy(Index) ->
+    List = [Name || {Name, _} <- Index],
+    Opts = [{integer_to_list(N), O}
+            || {N, O} <- lists:zip(lists:seq(1, length(List)), List)],
+    Menu = string:join([io_lib:format("  ~s - ~ts", [N, O]) || {N, O} <- Opts], "\r\n"),
+    {Menu, Opts}.
 
 emit(silent, _)      -> ok;
 emit(Message, State) -> unprompted(Message, State).
@@ -401,7 +433,6 @@ unprompted(Data, State = {Talker, _, _, _, _}) ->
         Data ++ "\r\n" ++ prompt(State),
     Talker ! {send, Message}.
 
-%% Magic
 greet() ->
     "\r\nWelcome to ErlMUD\r\n\r\n"
     "By what name do you wish to be known?\r\n"
@@ -445,33 +476,6 @@ sys_help() ->
     "    ?                  OR   help\r\n"
     "\r\n"
     "  Available Actions:\r\n".
-
-default_command_alias() ->
-    [{"n", "go north"},
-     {"s", "go south"},
-     {"e", "go east"},
-     {"w", "go west"},
-     {"d", "go down"},
-     {"u", "go up"},
-     {"l", "look"},
-     {"k", "kill"},
-     {"8", "go north"},
-     {"2", "go south"},
-     {"6", "go east"},
-     {"4", "go west"},
-     {"3", "go down"},
-     {"9", "go up"},
-     {"5", "look"},
-     {"7", "status"},
-     {"/", "kill"},
-     {"st", "status"},
-     {"stat", "status"},
-     {"north", "go north"},
-     {"south", "go south"},
-     {"east", "go east"},
-     {"west", "go west"},
-     {"down", "go down"},
-     {"up", "go up"}].
 
 %% Handler
 handle_down(State = {Talker, Handle, Minion, Channels},

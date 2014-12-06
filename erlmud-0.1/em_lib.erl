@@ -1,6 +1,6 @@
 -module(em_lib).
 -export([note/3, broadcast/2, call/2, call/3,
-         calc_weight/1, weight/1]).
+         calc_weight/1, weight/1, roll/1, roll/3]).
 
 note(Module, String, Args) ->
     S = "~p ~p: " ++ String ++ "~n",
@@ -20,6 +20,17 @@ calc_weight(Entities) ->
 
 weight(Entity = {{Mod, _}, _}) ->
     Mod:total_weight(Entity).
+
+roll({Min, Mean, Max}) ->
+    roll(Min, Mean, Max).
+
+roll(Min, Mean, Max) ->
+    random:seed(now()),
+    Span = Max - Min,
+    Peak = Mean - Min,
+    Base = random:uniform(Span),
+    Pull = random:uniform(),
+    round(((Base + Peak) / (1 + Pull)) + Min).
 
 %% Synchronous handler
 call(Proc, Request) ->

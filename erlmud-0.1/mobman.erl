@@ -1,12 +1,15 @@
 -module(mobman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/1,
-         spawn_minion/1, relocate/2]).
+         spawn_minion/1, relocate/2,
+         species_index/0]).
 
 %% interface
 spawn_minion(MobData) -> call({spawn_minion, MobData}).
 
 relocate(Mob, default) -> call({jump, {Mob, default_loc(Mob)}});
 relocate(Mob, LocID)   -> call({jump, {Mob, LocID}}).
+
+species_index() -> call(species).
 
 call(Request) -> em_lib:call(?MODULE, Request).
 
@@ -30,28 +33,32 @@ starter(Spawn, Parent, Conf) ->
 init(Parent, Conf) ->
     process_flag(trap_exit, true),
     note("Initializing with ~p", [Conf]),
+    Species = proplists:get_value(species, Conf),
     Live = [],
-    loop({Parent, Live, Conf}).
+    loop({Parent, Live, Species}).
 
 %% Service
-loop(State = {Parent, Live, Conf}) ->
+loop(State = {Parent, Live, Species}) ->
   receive
     {Controller, Ref, {spawn_minion, MobData}} ->
         {MobPid, NewLive} = spawn_minion(Controller, MobData, Live),
         Controller ! {Ref, MobPid},
-        loop({Parent, NewLive, Conf});
+        loop({Parent, NewLive, Species});
     {From, Ref, {jump, {Mob, LocID}}} ->
         NewLoc = jump(Mob, LocID),
         From ! {Ref, NewLoc},
+        loop(State);
+    {From, Ref, species} ->
+        From ! {Ref, Species},
         loop(State);
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]);
     Message = {'EXIT', _, _} ->
         NewLive = handle_exit(Live, Message),
-        loop({Parent, NewLive, Conf});
+        loop({Parent, NewLive, Species});
     status ->
-        note("Status:~n  Parent: ~p~n  Live: ~p~n  Conf: ~p",
-             [Parent, Live, Conf]),
+        note("Status:~n  Parent: ~p~n  Live: ~p~n  Species: ~p",
+             [Parent, Live, Species]),
         loop(State);
     code_change ->
         ?MODULE:code_change(State);

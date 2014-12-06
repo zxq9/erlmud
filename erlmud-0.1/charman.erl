@@ -103,13 +103,16 @@ load_char(Accs, Chars, Acc, Name) ->
             {error, owner}
     end.
 
-make_char(State = {Parent, Conf, Accs, Chars}, Acc, Data) ->
-    {{Mod, _}, _} = Data,
+make_char(State, Acc, {Name,  Data = none}) ->
+    new_char(State, Acc, Name, Data);
+make_char(State, Acc, Data = {{Mod, _}, _}) ->
     Name = Mod:read(name, Data),
+    new_char(State, Acc, Name, Data).
+
+new_char(State = {Parent, Conf, Accs, Chars}, Acc, Name, Data) ->
     case dict:is_key(Name, Chars) of
         true  ->
-            Response = {error, exists},
-            {Response, State};
+            {{error, exists}, State};
         false ->
             NewAccs = dict:append(Acc, Name, Accs),
             NewChars = dict:store(Name, Data, Chars),
