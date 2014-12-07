@@ -97,7 +97,6 @@ prompt(Pid) ->
 
 health(HP) ->
     case bracket(HP) of
-        6 -> "Healthy";
         5 -> "Healthy";
         4 -> "Scratched";
         3 -> "Hurt";
@@ -108,7 +107,6 @@ health(HP) ->
 
 stamina(SP) ->
     case bracket(SP) of
-        6 -> "Fresh";
         5 -> "Fresh";
         4 -> "Strong";
         3 -> "Tiring";
@@ -119,7 +117,6 @@ stamina(SP) ->
 
 magika(MP) ->
     case bracket(MP) of
-        6 -> "Enflow";
         5 -> "Enflow";
         4 -> "Focused";
         3 -> "Distracted";
@@ -129,7 +126,8 @@ magika(MP) ->
     end.
 
 bracket({Current, Max}) ->
-    Current div (Max div 5).
+    Z = 5,
+    (Current * Z) div ((Max * Z) div Z).
 
 actions() ->
     [{"go", go, observable,
