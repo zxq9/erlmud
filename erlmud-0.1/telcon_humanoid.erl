@@ -21,7 +21,7 @@ observe(Event, Minion) ->
         {{depart, Direction}, Actor, failure} ->
             Actor ++ " tried to go " ++ Direction ++ ", and failed.";
         {{depart, Direction}, Actor, success} ->
-            Actor ++ " departs to the " ++ Direction;
+            Actor ++ " departs " ++ Direction;
         {{glance, self}, self, _} ->
             "Feeling a bit vain today?";
         {{glance, Actor}, Actor, _} ->
@@ -88,8 +88,14 @@ render_status(Mob) ->
                    Level, Exp,
                    CurHP, MaxHP, CurSP, MaxSP, CurMP, MaxMP]).
 
-render_glance(View) ->
-    io_lib:format("~p", [View]).
+render_glance({{_, Species, Class, Homeland, _, _, _, _, _},
+               {Desc, {HP, _, _}, {{_, Equip}, {_, Inv}}, _, _, _, _}}) ->
+    io_lib:format("You see a ~ts ~ts from ~ts.\r\n"
+                  "~ts\r\n"
+                  "Wearing: ~tp\r\n"
+                  "Carrying: ~tp\r\n"
+                  "Health: ~ts",
+                  [Species, Class, Homeland, Desc, Equip, Inv, health(HP)]).
 
 prompt(Pid) ->
     {HP, SP, MP} = mob:check_condition(Pid),

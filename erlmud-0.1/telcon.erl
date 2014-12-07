@@ -265,10 +265,14 @@ exam(Channel) ->
         {ok, ChanPid} ->
             Handles = channel:handles(ChanPid),
             Count = length(Handles),
-            io_lib:format("~w: ~p\r\n    ~w",
+            io_lib:format(cyan("~ts") ++ gray(": ~p\r\n    ~ts"),
                           [Channel, Count, string:join(Handles, "\r\n    ")]);
         {error, _}    ->
-            io_lib:format("Channel ~w does not exist.", [Channel])
+            Message = string:join([gray("Channel"),
+                                   cyan("~ts"),
+                                   gray("does not exist")],
+                                  " "),
+            io_lib:format(Message, [Channel])
     end.
 
 join(State, []) ->
@@ -277,7 +281,7 @@ join(State = {Talker, Handle, Aliases, Minion, Channels}, String) ->
     {Channel, _} = chanhead(String),
     case lists:keymember(Channel, 1, Channels) of
         true ->
-            Response = io_lib:format("Already in ~w", [Channel]),
+            Response = io_lib:format("Already in " ++ cyan("~ts"), [Channel]),
             {Response, State};
         false ->
             ChanPid = chanman:acquire(Channel),
@@ -300,7 +304,7 @@ leave(State = {Talker, Handle, Aliases, Minion, Channels}, String) ->
             NewState = {Talker, Handle, Aliases, Minion, NewChannels},
             {ok, NewState};
         false ->
-            Response = io_lib:format("You're not in ~w", [Channel]),
+            Response = io_lib:format("You're not in ~ts", [Channel]),
             {Response, State}
     end.
 
@@ -311,7 +315,7 @@ chat(Channels, Line) ->
             Pid ! {chat, {self(), Message}},
             none;
         false ->
-            io_lib:format("You aren't in ~w", [Channel])
+            io_lib:format("You aren't in ~ts", [Channel])
     end.
 
 chanhead(String) ->
@@ -376,21 +380,22 @@ charquit({Talker, Handle, _, {_, CharPid, CharRef, _}, Channels}) ->
 
 charmake(State, []) ->
     {bargle(), State};
-charmake(State = {_, Handle, _, _, _}, String) ->
+charmake(State, String) ->
     {Name, _} = head(String),
-    Char = {Name, none},
-    Message = case charman:make(Handle, Char) of
-        ok              -> charcreate(Name, State);
-        {error, exists} -> "That name is already taken!"
+    Message = case charman:check(Name) of
+        available -> charcreate(Name, State);
+        taken     -> "That name is already taken!"
     end,
     {Message, State}.
 
-charcreate(Name, State) ->
+charcreate(Name, State = {_, Handle, _, _, _}) ->
     {SpecName, SpecMod} = ask_species(State),
     SpecCon = SpecMod:con_ext(text),
     Char = SpecCon:solicit_char(Name, SpecName, fun pickone/3, State),
-    charman:save({mob:read(name, Char), Char}),
-    io_lib:format("~ts created.", [Name]).
+    case charman:make(Handle, Char) of
+        ok              -> io_lib:format("~ts created.", [Name]);
+        {error, exists} -> "Someone just swiped that name!"
+    end.
 
 ask_species(State) ->
     pickone("What species?", mobman:species_index(), State).
@@ -411,7 +416,8 @@ pickone(Question, Index, State) ->
 
 pickone(Question, Index, Speaker, State = {Talker, _, _, _, _}) ->
     {Menu, Opts} = menufy(Index),
-    UserQuery = io_lib:format("~ts\r\n~ts\r\n $", [Question, Menu]),
+    String = white("~ts\r\n") ++ gray("~ts\r\n$ "),
+    UserQuery = io_lib:format(String, [Question, Menu]),
     Talker ! {send, UserQuery},
     Choice = receive {received, Bin} -> topline(Bin) end,
     case proplists:lookup(Choice, Opts) of

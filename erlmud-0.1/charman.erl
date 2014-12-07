@@ -1,6 +1,6 @@
 -module(charman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/1,
-         save/1, list/1, load/2, make/2, drop/2]).
+         save/1, list/1, load/2, check/1, make/2, drop/2]).
 
 %% Interface
 save(Char) -> call(save, Char).
@@ -8,6 +8,8 @@ save(Char) -> call(save, Char).
 list(Acc) -> call(get_chars, Acc).
 
 load(Acc, Name) -> call(load_char, {Acc, Name}).
+
+check(Name) -> call(check_char, Name).
 
 make(Acc, Char) -> call(make_char, {Acc, Char}).
 
@@ -58,6 +60,9 @@ loop(State = {Parent, Conf, Accs, Chars}) ->
         Result = load_char(Accs, Chars, Acc, Name),
         From ! {Ref, Result},
         loop(State);
+    {From, Ref, {check_char, Name}} ->
+        From ! {Ref, check_char(Chars, Name)},
+        loop(State);
     {From, Ref, {make_char, {Acc, Char}}} ->
         {Result, NewState} = make_char(State, Acc, Char),
         From ! {Ref, Result},
@@ -101,6 +106,12 @@ load_char(Accs, Chars, Acc, Name) ->
             end;
         error ->
             {error, owner}
+    end.
+
+check_char(Chars, Name) ->
+    case dict:is_key(Name, Chars) of
+        false -> available;
+        true  -> taken
     end.
 
 make_char(State, Acc, {Name,  Data = none}) ->

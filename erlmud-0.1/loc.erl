@@ -2,7 +2,7 @@
 -export([start_link/1, code_change/1,
          event/2, look/1, action/3, depart/3, arrive/2, load/2, drop/2]).
 
-% Entity = {Name, Pid, Aliases, BaseModule}
+% Entity = {Name, Pid, Aliases, BaseMod, IlkMod}
 
 %% Interface
 event(LocPid, Data) ->

@@ -232,37 +232,3 @@ head(Word, [H|T]) ->
 %% System
 note(String, Args) ->
     em_lib:note(?MODULE, String, Args).
-
-% {observable, untargeted}
-%   - Cast to location
-%   stand/sit/sleep/wake say emote
-% {observable, targeted}
-%   - Cast to location
-%   eat sheath mend light hold wear remove wield drink
-%   - Call through location to target, cast result(s) to location
-%   kill [emote Target] get pick drop steal palm take put go prac 
-% {unobservable, untargeted}
-%   - Silent
-%   score status level
-%   - Locally silent, cast to all affected area locations
-%   shout (to a zone)
-%   yell (to current an adjacent locations -- direction is known)
-%   bellow (to current and X-hops-away locations -- direction is known)
-% {unobservable, targeted}
-%   - Silent
-%   tell whisper
-
-% Observations:
-%   {observation, {Magnitude, Action, Who, Outcome}}
-%   "Susan appears out of nowhere."
-%   {observation, {Magnitude, {Verb, Target}, Who, Outcome}}
-%   "Susan arrives from the west."
-%   "Brian looks at Susan."
-%   "Susan smashes Brian's head into bloody fragments!"
-%   "Susan picks up a dagger."
-%   "Brian tries to bash Susan, but stumbles and falls!"
-%   {observation, {Magnitude, {Verb, DO, IO}, Who, Outcome}}
-%   "Brian gives Susan a gold coin."
-%   "Susan gets a dirty old pair of pants from a barrel."
-%   "Mishmash rips a bloody leg from the corpse of Brian."
-%   "Susan pokes Brian's eye with a stick."
