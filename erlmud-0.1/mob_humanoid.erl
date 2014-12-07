@@ -64,6 +64,8 @@ observable(glance, Data, State) ->
                 {ok, View} ->
                     emit(LocPid, State, {glance, Target}, Name, success),
                     ConPid ! {observation, {{glance, Target}, self, View}};
+                {error, self} ->
+                    emit(LocPid, State, {glance, Name}, Name, failure);
                 {error, _} ->
                     emit(LocPid, State, {glance, Target}, Name, failure)
             end
@@ -77,11 +79,10 @@ observable(say, Data, State) ->
 observable(go, Data, State) ->
     ConPid = mob:read(con_pid, State),
     Name = mob:read(name, State),
-    Aliases = mob:read(aliases, State),
     Loc = mob:read(loc, State),
     LocPid = mob:read(loc_pid, State),
     {Target, _} = head(Data),
-    Me = {Name, self(), Aliases, mob, ?MODULE},
+    Me = mob:me(State),
     NewLoc = case go(Target, Me, LocPid) of
         {{ok, New = {_, NewLocPid}}, OutName} ->
             emit(LocPid, State, {depart, Target}, Name, success),

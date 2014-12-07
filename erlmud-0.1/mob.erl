@@ -1,7 +1,7 @@
 -module(mob).
 -export([start_link/2, code_change/1,
-         new/1, new/2, read/2, edit/3,
-         state/1, check_condition/1, check_weight/1, incoming/2,
+         new/1, new/2, read/2, edit/3, me/1,
+         state/1, check_condition/1, check_weight/1,
          roll/2, reroll/2, shift/2, adjust/2, topoff/1]).
 
 %% Type interface
@@ -216,6 +216,10 @@ edit(loc, Loc, {Type, {Con, Names, Info, Status, _}}) ->
 edit(loc_id, LocID, Mob) ->
     edit(loc, setelement(1, read(loc, Mob), LocID), Mob).
 
+me(State) ->
+    Name = read(name, State),
+    {self(), [Name | read(aliases, State)], {Name, mob, visibility(State)}}.
+
 %% Interface
 state(MPid) ->
     em_lib:call(MPid, state).
@@ -225,9 +229,6 @@ check_condition(MobPid) ->
 
 check_weight(MobPid) ->
     em_lib:call(MobPid, check_weight).
-
-incoming(MobPid, Event) ->
-    em_lib:call(MobPid, incoming, Event).
 
 roll(Name, Influences) ->
     new(Name, resolve(Influences)).
@@ -274,8 +275,8 @@ start_link(Con, MobData) ->
 
 init(ConPid, MobData) ->
     note("Initializing with ~p", [MobData]),
-    Me = {read(name, MobData), self(), read(aliases, MobData), ?MODULE, read(ilk, MobData)},
-    locless(Me, edit(controller, ConPid, MobData)).
+%   Me = {self(), [read(name, MobData) | read(aliases, MobData)], {}},
+    locless(me(MobData), edit(controller, ConPid, MobData)).
 
 locless(Me, MobData) ->
     Oriented = case read(loc, MobData) of
@@ -343,10 +344,11 @@ con_down(Message, State) ->
 retire(State) ->
     LocPid = read(loc_pid, State),
     Name = read(name, State),
-    Aliases = read(aliases, State),
     loc:event(LocPid, {observation, {10000, {poof, Name, success}}}),
-    ok = loc:drop(LocPid, {Name, self(), Aliases, ?MODULE, read(ilk, State)}),
+    ok = loc:drop(LocPid, me(State)),
     ok = charman:save({Name, State}).
+
+visibility(_) -> 1000.
 
 %% Code changer
 code_change(State) ->

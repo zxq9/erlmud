@@ -2,7 +2,7 @@
 -export([start_link/1, code_change/1,
          event/2, look/1, action/3, depart/3, arrive/2, load/2, drop/2]).
 
-% Entity = {Name, Pid, Aliases, BaseMod, IlkMod}
+% Entity = {Pid, Names, Opaque}
 
 %% Interface
 event(LocPid, Data) ->
@@ -33,7 +33,9 @@ start_link(Conf) ->
 init(Conf = {ID, {Name, Desc}}) ->
     note("Initializing with ~p", [Conf]),
     Info = {Name, Desc},
-    Manifest = [],
+    Inventory = [],
+    Aliases = dict:new(),
+    Manifest = {Inventory, Aliases},
     Ways = init_ways(ID),
     loop({ID, Info, Manifest, Ways}).
 
@@ -62,17 +64,17 @@ neighbors_monitor(LiveIn) ->
 %% Service
 loop(State = {ID,
               Info = {Name, Desc},
-              Manifest,
+              Manifest = {Inventory, Aliases},
               Ways = {{LiveIn, LiveOut}, {Entrances, Exits}}}) ->
   receive
     {event, Data} ->
-        broadcast(Data, Manifest),
+        broadcast(Data, Inventory),
         loop(State);
     {From, Ref, look} ->
         From ! {Ref, State},
         loop(State);
     {From, Ref, {action, {Target, Event}}}->
-        Result = arbitrate(Target, Event, Manifest),
+        Result = arbitrate(From, Target, Event, Aliases),
         From ! {Ref, Result},
         loop(State);
     {From, Ref, {arrive, Entity}} ->
@@ -116,37 +118,37 @@ loop(State = {ID,
   end.
 
 %% Request handlers
-broadcast(Data, Manifest) ->
-    Pids = pids(Manifest),
+broadcast(Data, Inventory) ->
+    Pids = pids(Inventory),
     em_lib:broadcast(Pids, Data),
     ok.
 
-arbitrate(Target, Event, Manifest) ->
-    case lists:keyfind(Target, 1, Manifest) of
-        {_, Pid, _, Mod, _} -> Mod:incoming(Pid, Event);
-        false               -> {error, absent}
+arbitrate(Actor, Target, Event, Aliases) ->
+    case acquire(Target, Aliases) of
+        M = {error, _}         -> M;
+        Pid when Pid =:= Actor -> {error, self};
+        Pid                    -> em_lib:incoming(Pid, Event)
     end.
 
-arrival(Entity = {_, Pid, _, _, _}, Manifest, ID) ->
-    link(Pid),
-    {{ok, {ID, self()}}, [Entity | Manifest]}.
+arrival(Entity, Manifest, ID) ->
+    NewManifest = accept(Entity, Manifest),
+    {{ok, {ID, self()}}, NewManifest}.
 
-departure(Entity = {_, Pid, _, _, _}, ExitName, Manifest, LiveOut) ->
+departure(Entity, ExitName, Manifest, LiveOut) ->
     case lists:keyfind(ExitName, 1, LiveOut) of
         {_, {_, {OutName, _}}, ExitPid, _} ->
-            unlink(Pid),
-            {{ok, ExitPid, OutName}, lists:delete(Entity, Manifest)};
+            {{ok, ExitPid, OutName}, remove(Entity, Manifest)};
         false ->
             {{error, noexit}, Manifest}
     end.
 
-accept(Entity = {_, Pid, _, _, _}, Manifest) ->
+accept(Entity = {Pid, Names, _}, {Inventory, Aliases}) ->
     link(Pid),
-    [Entity | Manifest].
+    {[Entity | Inventory], store_aliases(Names, Pid, Aliases)}.
 
-remove(Entity = {_, Pid, _, _, _}, Manifest) ->
+remove(Entity = {Pid, _, _}, Manifest) ->
     unlink(Pid),
-    lists:delete(Entity, Manifest).
+    scrub_manifest(Entity, Manifest).
 
 monitor_exit(WayID, WayPid, LiveOut, Exits) ->
     LiveOutIDs = [ID || {_, ID, _, _} <- LiveOut],
@@ -168,7 +170,48 @@ handle_down(Message = {_, Ref, _, _, _}, LiveOut) ->
     end.
 
 %% Magic
-pids(Manifest) -> [Pid || {_, Pid, _, _, _} <- Manifest].
+pids(Inventory) -> [Pid || {Pid, _, _} <- Inventory].
+
+acquire({Name, Index}, Aliases) ->
+    case dict:find(Name, Aliases) of
+        {ok, Pids} ->
+            Length = length(Pids),
+            if
+                Length =:= 0    -> {error, absent};
+                Length >= Index -> lists:nth(Index, Pids);
+                Length <  Index -> lists:last(Pids)
+            end;
+        error ->
+            {error, absent}
+    end;
+acquire(Target, Aliases) ->
+    case dict:find(Target, Aliases) of
+        {ok, Pids} -> hd(Pids);
+        error      -> {error, absent}
+    end.
+
+store_aliases([], _, Aliases) ->
+    Aliases;
+store_aliases([Name | Names], Pid, Aliases) ->
+    Updated = case dict:find(Name, Aliases) of
+        {ok, Pids} -> dict:store(Name, [Pid | Pids], Aliases);
+        error      -> dict:store(Name, [Pid], Aliases)
+    end,
+    store_aliases(Names, Pid, Updated).
+
+scrub_manifest(Entity = {Pid, Names, _}, {Inventory, Aliases}) ->
+    NewInventory = lists:delete(Entity, Inventory),
+    NewAliases = scrub_aliases(Names, Pid, Aliases),
+    {NewInventory, NewAliases}.
+
+scrub_aliases([], _, Aliases) ->
+    Aliases;
+scrub_aliases([Name | Names], Pid, Aliases) ->
+    Updated = case lists:delete(Pid, dict:fetch(Name, Aliases)) of
+        []   -> dict:erase(Name, Aliases);   
+        Pids -> dict:store(Name, Pids, Aliases)
+    end,
+    scrub_aliases(Names, Pid, Updated).
 
 %% Code changer
 code_change(State) ->

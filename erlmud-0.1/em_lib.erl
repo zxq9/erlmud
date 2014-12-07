@@ -1,5 +1,5 @@
 -module(em_lib).
--export([note/3, broadcast/2, call/2, call/3,
+-export([note/3, broadcast/2, call/2, call/3, incoming/2,
          calc_weight/1, weight/1, roll/1, roll/3]).
 
 note(Module, String, Args) ->
@@ -13,6 +13,9 @@ broadcast(Procs, Message) ->
 
 call(Proc, Verb, Data) ->
     call(Proc, {Verb, Data}).
+
+incoming(Pid, Event) ->
+    call(Pid, incoming, Event).
 
 calc_weight(Entities) ->
     SumWeight = fun(Entity, A) -> weight(Entity) + A end,

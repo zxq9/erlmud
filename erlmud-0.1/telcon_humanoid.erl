@@ -47,7 +47,11 @@ observe(Event, Minion) ->
             silent
     end.
 
-render_location({_, {Name, Description}, Inventory, {{_, Exits}, _}}, {_, MPid, _, _}) ->
+render_location({_,
+                {Name, Description},
+                {Inventory, _},
+                {{_, Exits}, _}},
+                {_, MPid, _, _}) ->
     ExitNames = string:join([N || {N, _, _, _} <- Exits], " "),
     Stuff = string:join(render_inventory(MPid, Inventory), "\r\n"),
     io_lib:format(telcon:cyan("~ts\r\n") ++
@@ -62,11 +66,11 @@ render_inventory(MPid, List) ->
 
 render_inventory(_, [], Stuff) ->
     Stuff;
-render_inventory(MPid, [{_, MPid, _, _, _} | Inv], Stuff) ->
+render_inventory(MPid, [{MPid, _, _} | Inv], Stuff) ->
     render_inventory(MPid, Inv, Stuff);
-render_inventory(MPid, [{Name, _, _, mob, _} | Inv], Stuff) ->
+render_inventory(MPid, [{_, _, {Name, mob, _}} | Inv], Stuff) ->
     render_inventory(MPid, Inv, [io_lib:format("~ts is standing here.", [Name]) | Stuff]);
-render_inventory(MPid, [{Name, _, _, obj, _} | Inv], Stuff) ->
+render_inventory(MPid, [{_, _, {Name, obj, _}} | Inv], Stuff) ->
     render_inventory(MPid, Inv, [io_lib:format("~ts is here.", [Name]) | Stuff]).
 
 render_status(Mob) ->
