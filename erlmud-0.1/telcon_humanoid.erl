@@ -78,14 +78,14 @@ render_status(Mob) ->
     {Moral, Chaos, Law} = mob:read(alignment, Mob),
     {Level, Exp} = mob:read(score, Mob),
     {{CurHP, MaxHP}, {CurSP, MaxSP}, {CurMP, MaxMP}} = mob:read(condition, Mob),
-    io_lib:format("You are ~s, a ~s ~s ~s.\r\n"
+    io_lib:format("You are ~s, a ~s ~s ~s from ~s.\r\n"
                   "You are wearing ~p and carrying ~p.\r\n"
                   "STR: ~p INT: ~p WIL: ~p DEX: ~p CON: ~p SPD: ~p\r\n"
                   "Morality: ~p  Chaos: ~p Lawfulness: ~p\r\n"
                   "Level:  ~p Experience: ~p\r\n"
                   "Health: (~p/~p) Stamina: (~p/~p) Magika (~p/~p)",
                   [mob:read(name, Mob), mob:read(sex, Mob),
-                   mob:read(species, Mob), mob:read(class, Mob),
+                   mob:read(species, Mob), mob:read(class, Mob), mob:read(homeland, Mob),
                    mob:read(worn_weight, Mob), mob:read(held_weight, Mob),
                    Str, Int, Wil, Dex, Con, Speed,
                    Moral, Chaos, Law,

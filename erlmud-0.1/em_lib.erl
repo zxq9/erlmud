@@ -33,7 +33,12 @@ roll(Min, Mean, Max) ->
     Peak = Mean - Min,
     Base = random:uniform(Span),
     Pull = random:uniform(),
-    round(((Base + Peak) / (1 + Pull)) + Min).
+    Z = if
+        Base == Peak -> Base; 
+        Base >  Peak -> (((Base - Peak) * Pull) + Base) / 2;
+        Base <  Peak -> (((Peak - Base) * Pull) + Base) / 2
+    end,
+    round(Z + Min).
 
 %% Synchronous handler
 call(Proc, Request) ->
