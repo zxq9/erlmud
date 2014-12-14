@@ -1,6 +1,6 @@
 -module(em_lib).
 -export([note/3, broadcast/2, call/2, call/3, incoming/2,
-         calc_weight/1, weight/1, roll/1, roll/3,
+         calc_weight/1, weight/1, roll/1, roll/3, bracket/3,
          entity/1, hand/5]).
 
 note(Module, String, Args) ->
@@ -54,6 +54,9 @@ roll(Min, Mean, Max) ->
         Base <  Peak -> (((Peak - Base) * Pull) + Base) / 2
     end,
     round(Z + Min).
+
+bracket(Index, Range, Layers) ->
+    (Index * Layers) div ((Range * Layers) div Layers).
 
 entity(State = {{Mod, _}, _}) ->
     Name = Mod:read(name, State),

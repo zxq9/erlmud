@@ -80,7 +80,7 @@ render_status(Mob) ->
     {Str, Int, Wil, Dex, Con, Speed} = mob:read(stats, Mob),
     {Moral, Chaos, Law} = mob:read(alignment, Mob),
     {Level, Exp} = mob:read(score, Mob),
-    {{CurHP, MaxHP}, {CurSP, MaxSP}, {CurMP, MaxMP},
+    {{{CurHP, MaxHP}, {CurSP, MaxSP}, {CurMP, MaxMP}},
      Vis, OB, PB, DB, Abs} = mob:read(condition, Mob),
     io_lib:format("You are ~s, a ~s ~s ~s from ~s.\r\n"
                   "You are wearing ~p and carrying ~p.\r\n"
@@ -113,39 +113,20 @@ prompt(Pid) ->
     {HP, SP, MP} = mob:check(health, Pid),
     io_lib:format("(~ts, ~ts, ~ts) $ ", [health(HP), stamina(SP), magika(MP)]).
 
-health(HP) ->
-    case bracket(HP) of
-        5 -> "Healthy";
-        4 -> "Scratched";
-        3 -> "Hurt";
-        2 -> "Wounded";
-        1 -> "Beaten";
-        0 -> "Critical"
-    end.
+health({Current, Max}) ->
+    Ratings = ["Critical", "Beaten", "Wounded", "Hurt", "Scratched", "Healthy"],
+    rate(Current, Max, Ratings).
 
-stamina(SP) ->
-    case bracket(SP) of
-        5 -> "Fresh";
-        4 -> "Strong";
-        3 -> "Tiring";
-        2 -> "Winded";
-        1 -> "Haggard";
-        0 -> "Bonked"
-    end.
+stamina({Current, Max}) ->
+    Ratings = ["Bonked", "Haggard", "Winded", "Tiring", "Strong", "Fresh"],
+    rate(Current, Max, Ratings).
 
-magika(MP) ->
-    case bracket(MP) of
-        5 -> "Enflow";
-        4 -> "Focused";
-        3 -> "Distracted";
-        2 -> "Headachy";
-        1 -> "Migrane";
-        0 -> "Zonked"
-    end.
+magika({Current, Max}) ->
+    Ratings = ["Zonked", "Migrane", "Headache", "Distracted", "Focused", "Enflow"],
+    rate(Current, Max, Ratings).
 
-bracket({Current, Max}) ->
-    Z = 5,
-    (Current * Z) div ((Max * Z) div Z).
+rate(Index, Range, Ratings) ->
+    lists:nth(em_lib:bracket(Index, Range, length(Ratings)), Ratings).
 
 actions() ->
     [{"go", go, observable,
