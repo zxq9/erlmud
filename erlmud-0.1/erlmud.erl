@@ -29,7 +29,7 @@ init() ->
                                        {"Pit of Despair",
                                         "A filthy place, not unlike your apartment."}}]},
                 {mobman, start_link, [{species, [{"human", mob_humanoid}]}]},
-                {objman, start_link, []},
+                {objman, start_link, [{types, [{"item", obj_item}]}]},
                 {netman, start_link, [{telnet, start_link, [2222]}]}],
     {ok, Running} = init(Services, []),
     loop(Running, Services).

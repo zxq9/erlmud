@@ -1,8 +1,6 @@
 -module(loc).
 -export([start_link/1, code_change/1,
-         event/2, look/1, action/3, depart/3, arrive/2, load/2, drop/2]).
-
-% Entity = {Pid, Names, Opaque}
+         event/2, look/1, action/3, depart/3, arrive/2, target/2, load/2, drop/2]).
 
 %% Interface
 event(LocPid, Data) ->
@@ -20,6 +18,9 @@ arrive(LocPid, Entity) ->
 depart(LocPid, Entity, Exit) ->
     em_lib:call(LocPid, depart, {Entity, Exit}).
 
+target(LocPid, Name) ->
+    em_lib:call(LocPid, target, Name).
+
 load(LocPid, Entity) ->
     em_lib:call(LocPid, load, Entity).
 
@@ -31,13 +32,12 @@ start_link(Conf) ->
     spawn_link(fun() -> init(Conf) end).
 
 init(Conf = {ID, {Name, Desc}}) ->
+    random:seed(now()),
     note("Initializing with ~p", [Conf]),
     Info = {Name, Desc},
-    Inventory = [],
-    Aliases = dict:new(),
-    Manifest = {Inventory, Aliases},
+    Inventory = inventory:new(),
     Ways = init_ways(ID),
-    loop({ID, Info, Manifest, Ways}).
+    loop({ID, Info, Inventory, Ways}).
 
 init_ways(ID) ->
     Entrances = wayman:get_entrances(ID),
@@ -64,48 +64,55 @@ neighbors_monitor(LiveIn) ->
 %% Service
 loop(State = {ID,
               Info = {Name, Desc},
-              Manifest = {Inventory, Aliases},
+              Inventory,
               Ways = {{LiveIn, LiveOut}, {Entrances, Exits}}}) ->
   receive
     {event, Data} ->
         broadcast(Data, Inventory),
         loop(State);
     {From, Ref, look} ->
-        From ! {Ref, State},
+        From ! {Ref, view(State)},
         loop(State);
     {From, Ref, {action, {Target, Event}}}->
-        Result = arbitrate(From, Target, Event, Aliases),
+        Result = arbitrate(From, Target, Event, Inventory),
         From ! {Ref, Result},
         loop(State);
     {From, Ref, {arrive, Entity}} ->
-        {Result, NewManifest} = arrival(Entity, Manifest, ID),
+        {Result, NewInventory} = arrival(Entity, Inventory, ID),
         From ! {Ref, Result},
-        loop({ID, Info, NewManifest, Ways});
+        loop({ID, Info, NewInventory, Ways});
     {From, Ref, {depart, {Entity, Exit}}} ->
-        {Result, NewManifest} = departure(Entity, Exit, Manifest, LiveOut),
+        {Result, NewInventory} = departure(Entity, Exit, Inventory, LiveOut),
         From ! {Ref, Result},
-        loop({ID, Info, NewManifest, Ways});
+        loop({ID, Info, NewInventory, Ways});
+    {From, Ref, {target, Name}} ->
+        From ! {Ref, inventory:find(Name, Inventory)},
+        loop(State);
     {From, Ref, {load, Entity}} ->
-        NewManifest = accept(Entity, Manifest),
+        NewInventory = accept(Entity, Inventory),
         From ! {Ref, ok},
-        loop({ID, Info, NewManifest, Ways});
+        loop({ID, Info, NewInventory, Ways});
     {From, Ref, {drop, Entity}} ->
-        NewManifest = remove(Entity, Manifest),
+        NewInventory = remove(Entity, Inventory),
         From ! {Ref, ok},
-        loop({ID, Info, NewManifest, Ways});
+        loop({ID, Info, NewInventory, Ways});
+    {From, Ref, {transfer, Order}} ->
+        NewInventory = transfer(From, Ref, Order, Inventory),
+        loop({ID, Info, NewInventory, Ways});
     {monitor, {way, WayID, WayPid}} ->
         NewLiveOut = monitor_exit(WayID, WayPid, LiveOut, Exits),
-        loop({ID, Info, Manifest, {{LiveIn, NewLiveOut}, {Entrances, Exits}}});
+        loop({ID, Info, Inventory, {{LiveIn, NewLiveOut}, {Entrances, Exits}}});
     Message = {'DOWN', _, process, _, _} ->
         NewLiveOut = handle_down(Message, LiveOut),
-        loop({ID, Info, Manifest, {{LiveIn, NewLiveOut}, {Entrances, Exits}}});
+        loop({ID, Info, Inventory, {{LiveIn, NewLiveOut}, {Entrances, Exits}}});
     status ->
+        Inv = inventory:to_list(Inventory),
         note("Status:~n"
              "  ID: ~p~n  Name: ~p~n  Desc: ~p~n"
-             "  Manifest: ~p~n"
+             "  Inventory: ~p~n"
              "  LiveIn: ~p~n  LiveOut: ~p~n"
              "  Entrances: ~p~n  Exits: ~p",
-             [ID, Name, Desc, Manifest, LiveIn, LiveOut, Entrances, Exits]),
+             [ID, Name, Desc, Inv, LiveIn, LiveOut, Entrances, Exits]),
         loop(State);
     code_change ->
         ?MODULE:code_change(State);
@@ -119,36 +126,53 @@ loop(State = {ID,
 
 %% Request handlers
 broadcast(Data, Inventory) ->
-    Pids = pids(Inventory),
+    Pids = inventory:pids(Inventory),
     em_lib:broadcast(Pids, Data),
     ok.
 
-arbitrate(Actor, Target, Event, Aliases) ->
-    case acquire(Target, Aliases) of
-        M = {error, _}         -> M;
-        Pid when Pid =:= Actor -> {error, self};
-        Pid                    -> em_lib:incoming(Pid, Event)
+view({_, {Name, Description}, Inventory, {{_, Exits}, _}}) ->
+    {Name, Description, inventory:to_list(Inventory), Exits}.
+
+arbitrate(Actor, Target, Event, Inventory) ->
+    case inventory:find(Target, Inventory) of
+        {ok, Pid} when Pid =:= Actor -> {error, self};
+        {ok, Pid}                    -> em_lib:incoming(Pid, Event);
+        M = {error, _}               -> M
     end.
 
-arrival(Entity, Manifest, ID) ->
-    NewManifest = accept(Entity, Manifest),
-    {{ok, {ID, self()}}, NewManifest}.
+arrival(Entity, Inventory, ID) ->
+    NewInventory = accept(Entity, Inventory),
+    {{ok, {ID, self()}}, NewInventory}.
 
-departure(Entity, ExitName, Manifest, LiveOut) ->
+departure(Entity, ExitName, Inventory, LiveOut) ->
     case lists:keyfind(ExitName, 1, LiveOut) of
         {_, {_, {OutName, _}}, ExitPid, _} ->
-            {{ok, ExitPid, OutName}, remove(Entity, Manifest)};
+            {{ok, ExitPid, OutName}, remove(Entity, Inventory)};
         false ->
-            {{error, noexit}, Manifest}
+            {{error, noexit}, Inventory}
     end.
 
-accept(Entity = {Pid, Names, _}, {Inventory, Aliases}) ->
+accept(Entity = {Pid, _, _}, Inventory) ->
     link(Pid),
-    {[Entity | Inventory], store_aliases(Names, Pid, Aliases)}.
+    inventory:add(Entity, Inventory).
 
-remove(Entity = {Pid, _, _}, Manifest) ->
+remove(Entity = {Pid, _, _}, Inventory) ->
     unlink(Pid),
-    scrub_manifest(Entity, Manifest).
+    {ok, NewInventory} = inventory:drop(Entity, Inventory),
+    NewInventory.
+
+transfer(From, Ref, {Target, TRef}, Inventory) ->
+    case inventory:find(Target, Inventory) of
+        M = {ok, TPid}    ->
+            From ! {Ref, M},
+            receive
+                {ok, TRef} -> inventory:drop_pid(TPid, Inventory)
+                after 1000 -> exit({error, stalled_transfer})
+            end;
+        M = {error, _} ->
+            From ! {Ref, M},
+            Inventory
+    end.
 
 monitor_exit(WayID, WayPid, LiveOut, Exits) ->
     LiveOutIDs = [ID || {_, ID, _, _} <- LiveOut],
@@ -168,50 +192,6 @@ handle_down(Message = {_, Ref, _, _, _}, LiveOut) ->
             note("Received ~p", [Message]),
             LiveOut
     end.
-
-%% Magic
-pids(Inventory) -> [Pid || {Pid, _, _} <- Inventory].
-
-acquire({Name, Index}, Aliases) ->
-    case dict:find(Name, Aliases) of
-        {ok, Pids} ->
-            Length = length(Pids),
-            if
-                Length =:= 0    -> {error, absent};
-                Length >= Index -> lists:nth(Index, Pids);
-                Length <  Index -> lists:last(Pids)
-            end;
-        error ->
-            {error, absent}
-    end;
-acquire(Target, Aliases) ->
-    case dict:find(Target, Aliases) of
-        {ok, Pids} -> hd(Pids);
-        error      -> {error, absent}
-    end.
-
-store_aliases([], _, Aliases) ->
-    Aliases;
-store_aliases([Name | Names], Pid, Aliases) ->
-    Updated = case dict:find(Name, Aliases) of
-        {ok, Pids} -> dict:store(Name, [Pid | Pids], Aliases);
-        error      -> dict:store(Name, [Pid], Aliases)
-    end,
-    store_aliases(Names, Pid, Updated).
-
-scrub_manifest(Entity = {Pid, Names, _}, {Inventory, Aliases}) ->
-    NewInventory = lists:delete(Entity, Inventory),
-    NewAliases = scrub_aliases(Names, Pid, Aliases),
-    {NewInventory, NewAliases}.
-
-scrub_aliases([], _, Aliases) ->
-    Aliases;
-scrub_aliases([Name | Names], Pid, Aliases) ->
-    Updated = case lists:delete(Pid, dict:fetch(Name, Aliases)) of
-        []   -> dict:erase(Name, Aliases);   
-        Pids -> dict:store(Name, Pids, Aliases)
-    end,
-    scrub_aliases(Names, Pid, Updated).
 
 %% Code changer
 code_change(State) ->

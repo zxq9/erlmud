@@ -1,12 +1,12 @@
 -module(mobman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/1,
-         spawn_minion/1, relocate/2,
+         spawn_mob/1, relocate/2,
          species_index/0]).
 
 %% interface
-spawn_minion(MobData) -> call({spawn_minion, MobData}).
+spawn_mob(MobData) -> call({spawn_mob, MobData}).
 
-relocate(Mob, default) -> call({jump, {Mob, default_loc(Mob)}});
+relocate(Mob, default) -> relocate(Mob, default_loc(Mob));
 relocate(Mob, LocID)   -> call({jump, {Mob, LocID}}).
 
 species_index() -> call(species).
@@ -31,6 +31,7 @@ starter(Spawn, Parent, Conf) ->
     end.
 
 init(Parent, Conf) ->
+    random:seed(now()),
     process_flag(trap_exit, true),
     note("Initializing with ~p", [Conf]),
     Species = proplists:get_value(species, Conf),
@@ -40,8 +41,8 @@ init(Parent, Conf) ->
 %% Service
 loop(State = {Parent, Live, Species}) ->
   receive
-    {Controller, Ref, {spawn_minion, MobData}} ->
-        {MobPid, NewLive} = spawn_minion(Controller, MobData, Live),
+    {Controller, Ref, {spawn_mob, MobData}} ->
+        {MobPid, NewLive} = spawn_mob(Controller, MobData, Live),
         Controller ! {Ref, MobPid},
         loop({Parent, NewLive, Species});
     {From, Ref, {jump, {Mob, LocID}}} ->
@@ -71,8 +72,7 @@ loop(State = {Parent, Live, Species}) ->
   end.
 
 %% Controller calls
-spawn_minion(Controller, MobData, Live) ->
-    {{Mod, _}, _} = MobData,
+spawn_mob(Controller, MobData = {{Mod, _}, _}, Live) ->
     Ilk = Mod:read(ilk, MobData),
     MobPid = mob:start_link(Controller, MobData),
     NewLive = [{MobPid, Ilk} | Live],

@@ -1,6 +1,7 @@
 -module(mob_humanoid).
 -export([observe/3, evaluate/3, react/2,
          level/1, species/0, class/0,
+         head/1,
          con_ext/1]).
 
 %% Interface
@@ -98,7 +99,35 @@ observable(go, Data, State) ->
             emit(NewLocPid, State, jump, Name, success),
             New
     end,
-    mob:edit(loc, NewLoc, State).
+    mob:edit(loc, NewLoc, State);
+observable(take, Data, State) ->
+    {Target, _} = head(Data),
+    Self = self(),
+    TRef = make_ref(),
+    LocPid = mob:read(loc_pid, State),
+    Hand = spawn(em_lib, hand, [Self, TRef, Target, LocPid, Self]),
+    Mon = monitor(process, Hand),
+    receive
+        {TRef, {ok, TPid}} ->
+            Name = mob:read(name, State),
+            Taken = {_, _, {TName, _, _}} = em_lib:call(TPid, check, self),
+            NewHeld = [Taken | mob:read(held, State)],
+            NewState = mob:edit(held, NewHeld, State),
+            emit(LocPid, NewState, {take, TName}, Name, success),
+            NewState;
+        {TRef, {error, absent}} ->
+            ConPid = mob:read(con_pid, State),
+            ConPid ! {observation, {{take, Target}, self, failure}},
+            State;
+        {'DOWN', Mon, process, Hand, Reason} ->
+            ConPid = mob:read(con_pid, State),
+            ConPid ! {observation, {{take, Target}, self, failure}},
+            note("Hand ~p failed with ~p", [Hand, Reason]),
+            State
+    after 1000 ->
+        note("Hand ~p timed out.", [Hand]),
+        State
+    end.
 
 unobservable(look, _, State) ->
     View = loc:look(mob:read(loc_pid, State)),
@@ -217,8 +246,10 @@ class() ->
 %% Binary & String handling
 head(Line) ->
     Stripped = string:strip(Line),
-    {Head, Tail} = head([], Stripped),
-    {lists:reverse(Head), Tail}.
+    case head([], Stripped) of
+        Z = {{_, _}, _} -> Z;
+        {Head, Tail}   -> {lists:reverse(Head), Tail}
+    end.
 
 head(Word, []) ->
     {Word, []};
@@ -226,8 +257,15 @@ head([], [$\s|T]) ->
     head([], T);
 head(Word, [H|T]) ->
     case H of
-        $\s -> {Word, T};
-        Z   -> head([Z|Word], T)
+        $\s ->
+            {Word, T};
+%       $. when is_number(Word) ->
+        $. ->
+            Index = list_to_integer(lists:reverse(Word)),
+            {Target, Rest} = head(T),
+            {{Index, Target}, Rest};
+        Z ->
+            head([Z|Word], T)
     end.
 
 %% System

@@ -1,7 +1,7 @@
 -module(mob).
 -export([start_link/2, code_change/1,
          new/1, new/2, read/2, edit/3, me/1,
-         state/1, check_condition/1, check_weight/1,
+         check/2,
          roll/2, reroll/2, shift/2, adjust/2, topoff/1]).
 
 %% Type interface
@@ -12,12 +12,19 @@ new(Name) ->
     {{Height, Weight}, {BaseHP, BaseSP, BaseMP}, Stats} =
         {{1, 1}, {1, 1, 1}, {1, 1, 1, 1, 1, 1}},
     Alignment = {0, 0, 0}, % {Morality, Chaos, Law}
-    Condition = {{BaseHP, BaseHP}, {BaseSP, BaseSP}, {BaseMP, BaseMP}},
-    Worn = [],
-    WornWeight = em_lib:calc_weight(Worn),
-    Held = [],
-    HeldWeight = em_lib:calc_weight(Held),
-    Inventory = {{WornWeight, Worn}, {HeldWeight, Held}},
+    Vis = 10000,
+    OB = 10,
+    PB = 10,
+    DB = 10,
+    Abs = 0,
+    Health = {{BaseHP, BaseHP}, {BaseSP, BaseSP}, {BaseMP, BaseMP}},
+    Condition = {Health, Vis, OB, PB, DB, Abs},
+    WornInv = [],
+    WornAli = dict:new(),
+    Worn = {WornInv, WornAli},
+    WornWeight = em_lib:calc_weight(WornInv),
+    Carried = inventory:new(),
+    Inventory = {{WornWeight, Worn}, Carried},
     Effects = [],
     PassiveSkills = [],
     ActiveSkills = [],
@@ -25,16 +32,20 @@ new(Name) ->
     Level = 1,
     Exp = 1,
     Score = {Level, Exp},
-    Location = {0, 0, 0},
-    {{?MODULE,0},
+    LocID = {0, 0, 0},
+    {{?MODULE, 0},
      {{none, none},
       {Name, Aliases},
       {Ilk, Species, Class, Homeland, DOB, Height, Weight, Sex, Stats},
       {Description, Condition, Inventory, Effects, Skills, Score, Alignment},
-      {Location, none}}}.
+      {LocID, none}}}.
 
 new(Name, Data) ->
     adjust(mob:new(Name), Data).
+
+read(mod, {Mod, _}) -> Mod;
+read(module, Mob)  -> element(1, read(mod, Mob));
+read(version, Mob) -> element(2, read(mod, Mob));
 
 read(controller, {_, {Con, _, _, _, _}}) -> Con;
 read(con_pid, Mob) -> element(1, read(controller, Mob));
@@ -43,6 +54,7 @@ read(con_ref, Mob) -> element(2, read(controller, Mob));
 read(names, {_, {_, Names, _, _, _}}) -> Names;
 read(name, Mob)    -> element(1, read(names, Mob));
 read(aliases, Mob) -> element(2, read(names, Mob));
+read(id, Mob)      -> read(name, Mob);
 
 read(info, {_, {_, _, Info, _, _}}) -> Info;
 read(ilk, Mob)      -> element(1, read(info, Mob));
@@ -74,10 +86,11 @@ read(alignment, Mob)   -> element(7, read(status, Mob));
 read(equip, Mob)       -> element(1, read(inventory, Mob));
 read(worn_weight, Mob) -> element(1, read(equip, Mob));
 read(worn, Mob)        -> element(2, read(equip, Mob));
+read(worn_inv, Mob)    -> element(1, read(worn, Mob));
+read(worn_ali, Mob)    -> element(2, read(worn, Mob));
 
-read(carried, Mob)     -> element(2, read(inventory, Mob));
-read(held_weight, Mob) -> element(1, read(carried, Mob));
-read(held, Mob)        -> element(2, read(carried, Mob));
+read(held, Mob)        -> inventory:to_list(element(2, read(inventory, Mob)));
+read(held_weight, Mob) -> inventory:weight(element(2, read(inventory, Mob)));
 
 read(passive_skills, Mob) -> element(1, read(skills, Mob));
 read(active_skills, Mob)  -> element(2, read(skills, Mob));
@@ -89,17 +102,24 @@ read(morality, Mob) -> element(1, read(alignment, Mob));
 read(chaos, Mob)    -> element(2, read(alignment, Mob));
 read(law, Mob)      -> element(3, read(alignment, Mob));
 
-read(hp, Mob)     -> element(1, read(condition, Mob));
+read(health, Mob) -> element(1, read(condition, Mob));
+read(hp, Mob)     -> element(1, read(health, Mob));
 read(cur_hp, Mob) -> element(1, read(hp, Mob));
 read(max_hp, Mob) -> element(2, read(hp, Mob));
 
-read(sp, Mob)     -> element(2, read(condition, Mob));
+read(sp, Mob)     -> element(2, read(health, Mob));
 read(cur_sp, Mob) -> element(1, read(sp, Mob));
 read(max_sp, Mob) -> element(2, read(sp, Mob));
 
-read(mp, Mob)     -> element(3, read(condition, Mob));
+read(mp, Mob)     -> element(3, read(health, Mob));
 read(cur_mp, Mob) -> element(1, read(mp, Mob));
 read(max_mp, Mob) -> element(2, read(mp, Mob));
+
+read(vis, Mob) -> element(2, read(condition, Mob));
+read(ob, Mob)  -> element(3, read(condition, Mob));
+read(pb, Mob)  -> element(4, read(condition, Mob));
+read(db, Mob)  -> element(5, read(condition, Mob));
+read(abs, Mob) -> element(6, read(condition, Mob));
 
 read(total_weight, Mob) ->
     read(weight, Mob) + read(worn_weight, Mob) + read(held_weight, Mob);
@@ -157,34 +177,49 @@ edit(description, Desc, Mob) ->
 edit(condition, Condition, Mob) ->
     {Desc, _, Inv, Eff, Sk, Sc, Align} = read(status, Mob),
     edit(status, {Desc, Condition, Inv, Eff, Sk, Sc, Align}, Mob);
+edit(health, Health, Mob) ->
+    edit(condition, setelement(1, read(condition, Mob), Health), Mob);
 edit(hp, HP, Mob) ->
-    {_, SP, MP} = read(condition, Mob),
-    edit(condition, {HP, SP, MP}, Mob);
+    edit(health, setelement(1, read(health, Mob), HP), Mob);
 edit(cur_hp, CurHP, Mob) ->
     edit(hp, {CurHP, read(max_hp, Mob)}, Mob);
 edit(max_hp, MaxHP, Mob) ->
     edit(hp, {read(cur_hp, Mob), MaxHP}, Mob);
 edit(sp, SP, Mob) ->
-    {HP, _, MP} = read(condition, Mob),
-    edit(condition, {HP, SP, MP}, Mob);
+    edit(health, setelement(2, read(health, Mob), SP), Mob);
 edit(cur_sp, CurSP, Mob) ->
     edit(sp, {CurSP, read(max_sp, Mob)}, Mob);
 edit(max_sp, MaxSP, Mob) ->
     edit(sp, {read(cur_sp, Mob), MaxSP}, Mob);
 edit(mp, MP, Mob) ->
-    {HP, SP, _} = read(condition, Mob),
-    edit(condition, {HP, SP, MP}, Mob);
+    edit(health, setelement(3, read(health, Mob), MP), Mob);
 edit(cur_mp, CurMP, Mob) ->
     edit(mp, {CurMP, read(max_hp, Mob)}, Mob);
 edit(max_mp, MaxMP, Mob) ->
     edit(mp, {read(cur_mp, Mob), MaxMP}, Mob);
+edit(vis, Vis, Mob) ->
+    edit(condition, setelement(2, read(condition, Mob), Vis), Mob);
+edit(ob, OB, Mob) ->
+    edit(condition, setelement(3, read(condition, Mob), OB), Mob);
+edit(pb, PB, Mob) ->
+    edit(condition, setelement(4, read(condition, Mob), PB), Mob);
+edit(db, DB, Mob) ->
+    edit(condition, setelement(5, read(condition, Mob), DB), Mob);
+edit(abs, Abs, Mob) ->
+    edit(condition, setelement(6, read(condition, Mob), Abs), Mob);
 edit(inventory, Inv, Mob) ->
     {Desc, Condition, _, Eff, Sk, Sc, Align} = read(status, Mob),
     edit(status, {Desc, Condition, Inv, Eff, Sk, Sc, Align}, Mob);
-edit(worn, Worn, Mob) ->
-    edit(inventory, {{em_lib:calc_weight(Worn), Worn}, read(carried, Mob)}, Mob);
-edit(held, Held, Mob) ->
-    edit(inventory, {read(equip, Mob), {em_lib:calc_weight(Held), Held}}, Mob);
+edit(worn_inv, WornInv, Mob) ->
+    edit(inventory,
+         {{em_lib:calc_weight(WornInv), {WornInv, em_lib:index_aliases(WornInv)}},
+          read(carried, Mob)},
+         Mob);
+edit(held_inv, HeldInv, Mob) ->
+    edit(inventory,
+         {read(equip, Mob),
+          {em_lib:calc_weight(HeldInv), {HeldInv, em_lib:index_aliases(HeldInv)}}},
+         Mob);
 edit(effects, Eff, Mob) ->
     {Desc, Condition, Inv, _, Sk, Sc, Align} = read(status, Mob),
     edit(status, {Desc, Condition, Inv, Eff, Sk, Sc, Align}, Mob);
@@ -216,19 +251,10 @@ edit(loc, Loc, {Type, {Con, Names, Info, Status, _}}) ->
 edit(loc_id, LocID, Mob) ->
     edit(loc, setelement(1, read(loc, Mob), LocID), Mob).
 
-me(State) ->
-    Name = read(name, State),
-    {self(), [Name | read(aliases, State)], {Name, mob, visibility(State)}}.
+me(State) -> em_lib:entity(State).
 
 %% Interface
-state(MPid) ->
-    em_lib:call(MPid, state).
-
-check_condition(MobPid) ->
-    em_lib:call(MobPid, check_condition).
-
-check_weight(MobPid) ->
-    em_lib:call(MobPid, check_weight).
+check(Attribute, MobPid) -> em_lib:call(MobPid, check, Attribute).
 
 roll(Name, Influences) ->
     new(Name, resolve(Influences)).
@@ -267,15 +293,15 @@ topoff(Mob) ->
     MaxHP = read(max_hp, Mob),
     MaxSP = read(max_sp, Mob),
     MaxMP = read(max_mp, Mob),
-    edit(condition, {{MaxHP, MaxHP}, {MaxSP, MaxSP}, {MaxMP, MaxMP}}, Mob).
+    edit(health, {{MaxHP, MaxHP}, {MaxSP, MaxSP}, {MaxMP, MaxMP}}, Mob).
 
 %% Startup
 start_link(Con, MobData) ->
     spawn_link(fun() -> init(Con, MobData) end).
 
 init(ConPid, MobData) ->
+    random:seed(now()),
     note("Initializing with ~p", [MobData]),
-%   Me = {self(), [read(name, MobData) | read(aliases, MobData)], {}},
     locless(me(MobData), edit(controller, ConPid, MobData)).
 
 locless(Me, MobData) ->
@@ -287,21 +313,16 @@ locless(Me, MobData) ->
 
 enter_world(State) ->
     loc:event(read(loc_pid, State),
-              {observation, {10000, {warp, read(name, State), success}}}),
+              {observation, {read(vis, State), {warp, read(name, State), success}}}),
     self() ! {action, {unobservable, {look, []}}},
     loop(State).
 
+%% Life!
 loop(State) ->
     {ConPid, ConRef} = read(controller, State),
   receive
-    {From, Ref, check_condition} ->
-        From ! {Ref, read(condition, State)},
-        loop(State);
-    {From, Ref, check_weight} ->
-        From ! {Ref, {ok, read(weight, State)}},
-        loop(State);
-    {From, Ref, state} ->
-        From ! {Ref, State},
+    {From, Ref, {check, Attribute}} ->
+        From ! {Ref, assess(Attribute, State)},
         loop(State);
     {observation, {Magnitude, Event}} ->
         Ilk = read(ilk, State),
@@ -344,11 +365,16 @@ con_down(Message, State) ->
 retire(State) ->
     LocPid = read(loc_pid, State),
     Name = read(name, State),
-    loc:event(LocPid, {observation, {10000, {poof, Name, success}}}),
+    loc:event(LocPid, {observation, {read(vis, State), {poof, Name, success}}}),
     ok = loc:drop(LocPid, me(State)),
     ok = charman:save({Name, State}).
 
-visibility(_) -> 1000.
+assess(weight, State) ->
+    read(total_weight, State);
+assess(self, State) ->
+    me(State);
+assess(Attribute, State) ->
+    read(Attribute, State).
 
 %% Code changer
 code_change(State) ->

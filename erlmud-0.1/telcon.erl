@@ -355,7 +355,7 @@ charload(State = {Talker, Handle, _, {none, _, _, _}, Channels}, String) ->
             {Message, State};
         {ok, CharData = {{Mod, _}, _}} ->
             Ilk = (Mod:read(ilk, CharData)):con_ext(text),
-            CharPid = mobman:spawn_minion(CharData),
+            CharPid = mobman:spawn_mob(CharData),
             CharRef = monitor(process, CharPid),
             Actions = init_actions(Ilk),
             Minion = {Ilk, CharPid, CharRef, Actions},

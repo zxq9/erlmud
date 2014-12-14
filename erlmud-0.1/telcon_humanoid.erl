@@ -22,6 +22,12 @@ observe(Event, Minion) ->
             Actor ++ " tried to go " ++ Direction ++ ", and failed.";
         {{depart, Direction}, Actor, success} ->
             Actor ++ " departs " ++ Direction;
+        {{take, ObjName}, self, success} ->
+            "You get a " ++ ObjName;
+        {{take, ObjName}, self, failure} ->
+            "You can't take the " ++ ObjName ++ ".";
+        {{take, ObjName}, Actor, success} ->
+            Actor ++ " gets a " ++ ObjName;
         {{glance, self}, self, _} ->
             "Feeling a bit vain today?";
         {{glance, Actor}, Actor, _} ->
@@ -47,10 +53,7 @@ observe(Event, Minion) ->
             silent
     end.
 
-render_location({_,
-                {Name, Description},
-                {Inventory, _},
-                {{_, Exits}, _}},
+render_location({Name, Description, Inventory, Exits},
                 {_, MPid, _, _}) ->
     ExitNames = string:join([N || {N, _, _, _} <- Exits], " "),
     Stuff = string:join(render_inventory(MPid, Inventory), "\r\n"),
@@ -61,8 +64,8 @@ render_location({_,
                   telcon:green("~ts"),
                   [Name, Description, ExitNames, Stuff]).
 
-render_inventory(MPid, List) ->
-    render_inventory(MPid, List, []).
+render_inventory(MPid, Inventory) ->
+    render_inventory(MPid, Inventory, []).
 
 render_inventory(_, [], Stuff) ->
     Stuff;
@@ -77,20 +80,23 @@ render_status(Mob) ->
     {Str, Int, Wil, Dex, Con, Speed} = mob:read(stats, Mob),
     {Moral, Chaos, Law} = mob:read(alignment, Mob),
     {Level, Exp} = mob:read(score, Mob),
-    {{CurHP, MaxHP}, {CurSP, MaxSP}, {CurMP, MaxMP}} = mob:read(condition, Mob),
+    {{CurHP, MaxHP}, {CurSP, MaxSP}, {CurMP, MaxMP},
+     Vis, OB, PB, DB, Abs} = mob:read(condition, Mob),
     io_lib:format("You are ~s, a ~s ~s ~s from ~s.\r\n"
                   "You are wearing ~p and carrying ~p.\r\n"
                   "STR: ~p INT: ~p WIL: ~p DEX: ~p CON: ~p SPD: ~p\r\n"
                   "Morality: ~p  Chaos: ~p Lawfulness: ~p\r\n"
                   "Level:  ~p Experience: ~p\r\n"
-                  "Health: (~p/~p) Stamina: (~p/~p) Magika (~p/~p)",
+                  "Health: (~p/~p) Stamina: (~p/~p) Magika (~p/~p)\r\n"
+                  "Vis: ~w OB: ~w PB: ~w DB: ~w Abs: ~w%",
                   [mob:read(name, Mob), mob:read(sex, Mob),
                    mob:read(species, Mob), mob:read(class, Mob), mob:read(homeland, Mob),
                    mob:read(worn_weight, Mob), mob:read(held_weight, Mob),
                    Str, Int, Wil, Dex, Con, Speed,
                    Moral, Chaos, Law,
                    Level, Exp,
-                   CurHP, MaxHP, CurSP, MaxSP, CurMP, MaxMP]).
+                   CurHP, MaxHP, CurSP, MaxSP, CurMP, MaxMP,
+                   Vis, OB, PB, DB, Abs]).
 
 render_glance({{_, Species, Class, Homeland, _, _, _, _, _},
                {Desc, {HP, _, _}, {{_, Equip}, {_, Inv}}, _, _, _, _}}) ->
@@ -99,10 +105,12 @@ render_glance({{_, Species, Class, Homeland, _, _, _, _, _},
                   "Wearing: ~tp\r\n"
                   "Carrying: ~tp\r\n"
                   "Health: ~ts",
-                  [Species, Class, Homeland, Desc, Equip, Inv, health(HP)]).
+                  [Species, Class, Homeland, Desc, Equip, Inv, health(HP)]);
+render_glance({obj, Name, Description}) ->
+    io_lib:format("You look at the ~ts and see: ~ts", [Name, Description]).
 
 prompt(Pid) ->
-    {HP, SP, MP} = mob:check_condition(Pid),
+    {HP, SP, MP} = mob:check(health, Pid),
     io_lib:format("(~ts, ~ts, ~ts) $ ", [health(HP), stamina(SP), magika(MP)]).
 
 health(HP) ->
@@ -149,7 +157,9 @@ actions() ->
      {"look", look, unobservable,
       "look", "View your surroundings"},
      {"glance", glance, observable,
-      "glance Target", "Look at Target"}].
+      "glance Target", "Look at Target"},
+     {"take", take, observable,
+      "take Target", "Get somehing from the ground."}].
 
 alias() ->
     [{"n", "go north"},
