@@ -266,7 +266,7 @@ reroll(Mob) ->
     Influences = RollConf
                  ++ proplists:get_value(Sex, proplists:get_value("sex", Opts))
                  ++ proplists:get_value(Homeland, proplists:get_value("homeland", Opts))
-                 ++ proplists:get_value(Class, Mod:class()),
+                 ++ proplists:get_value(Class, proplists:get_value("class", Opts)),
     lists:foldl(fun tweak/2, Mob, Influences).
 
 tweak({Attribute, {set, Value}}, Mob) ->
