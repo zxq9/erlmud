@@ -1,7 +1,7 @@
 -module(mobman).
 -export([start/1, start/2, start_link/1, start_link/2, code_change/1,
          spawn_mob/1, relocate/2,
-         species_index/0]).
+         playable/0]).
 
 %% interface
 spawn_mob(MobData) -> call({spawn_mob, MobData}).
@@ -9,7 +9,7 @@ spawn_mob(MobData) -> call({spawn_mob, MobData}).
 relocate(Mob, default) -> relocate(Mob, default_loc(Mob));
 relocate(Mob, LocID)   -> call({jump, {Mob, LocID}}).
 
-species_index() -> call(species).
+playable() -> call(playable).
 
 call(Request) -> em_lib:call(?MODULE, Request).
 
@@ -34,32 +34,32 @@ init(Parent, Conf) ->
     random:seed(now()),
     process_flag(trap_exit, true),
     note("Initializing with ~p", [Conf]),
-    Species = proplists:get_value(species, Conf),
+    Playable = proplists:get_value(playable, Conf),
     Live = [],
-    loop({Parent, Live, Species}).
+    loop({Parent, Live, Playable}).
 
 %% Service
-loop(State = {Parent, Live, Species}) ->
+loop(State = {Parent, Live, Playable}) ->
   receive
     {Controller, Ref, {spawn_mob, MobData}} ->
         {MobPid, NewLive} = spawn_mob(Controller, MobData, Live),
         Controller ! {Ref, MobPid},
-        loop({Parent, NewLive, Species});
+        loop({Parent, NewLive, Playable});
     {From, Ref, {jump, {Mob, LocID}}} ->
         NewLoc = jump(Mob, LocID),
         From ! {Ref, NewLoc},
         loop(State);
-    {From, Ref, species} ->
-        From ! {Ref, Species},
+    {From, Ref, playable} ->
+        From ! {Ref, Playable},
         loop(State);
     {'EXIT', Parent, Reason} ->
         note("Parent~tp died with ~tp~nFollowing my leige!~n...Blarg!", [Parent, Reason]);
     Message = {'EXIT', _, _} ->
         NewLive = handle_exit(Live, Message),
-        loop({Parent, NewLive, Species});
+        loop({Parent, NewLive, Playable});
     status ->
-        note("Status:~n  Parent: ~p~n  Live: ~p~n  Species: ~p",
-             [Parent, Live, Species]),
+        note("Status:~n  Parent: ~p~n  Live: ~p~n  Playable: ~p",
+             [Parent, Live, Playable]),
         loop(State);
     code_change ->
         ?MODULE:code_change(State);

@@ -1,14 +1,14 @@
 -module(mob).
 -export([start_link/2, code_change/1,
-         new/1, new/2, read/2, edit/3, me/1,
+         new/1, read/2, edit/3, me/1,
          check/2,
-         roll/2, reroll/2, shift/2, adjust/2, topoff/1]).
+         roll/2, reroll/1, topoff/1]).
 
 %% Type interface
 new(Name) ->
     DOB = calendar:universal_time(),
     {Ilk, Aliases, Description} = {none, [], ""},
-    {Species, Class, Homeland, Sex} = {"mob", "mob", "mob", "mob"},
+    {Species, Class, Homeland, Sex} = {"mob", "mob", "Guf", "nh"},
     {{Height, Weight}, {BaseHP, BaseSP, BaseMP}, Stats} =
         {{1, 1}, {1, 1, 1}, {1, 1, 1, 1, 1, 1}},
     Alignment = {0, 0, 0}, % {Morality, Chaos, Law}
@@ -39,9 +39,6 @@ new(Name) ->
       {Ilk, Species, Class, Homeland, DOB, Height, Weight, Sex, Stats},
       {Description, Condition, Inventory, Effects, Skills, Score, Alignment},
       {LocID, none}}}.
-
-new(Name, Data) ->
-    adjust(mob:new(Name), Data).
 
 read(mod, {Mod, _}) -> Mod;
 read(module, Mob)  -> element(1, read(mod, Mob));
@@ -257,37 +254,29 @@ me(State) -> em_lib:entity(State).
 check(Attribute, MobPid) -> em_lib:call(MobPid, check, Attribute).
 
 roll(Name, Influences) ->
-    new(Name, resolve(Influences)).
+    lists:foldl(fun(I, M) -> tweak(I, M) end, new(Name), Influences).
 
-reroll(Mob, Influences) ->
-    adjust(resolve(Influences), Mob).
+reroll(Mob) ->
+    Mod = read(ilk, Mob),
+    Species = read(species, Mob),
+    Sex = read(sex, Mob),
+    Homeland = read(sex, Mob),
+    Class = read(class, Mob),
+    {RollConf, Opts} = proplists:get_value(Species, Mod:species()),
+    Influences = RollConf
+                 ++ proplists:get_value(Sex, proplists:get_value("sex", Opts))
+                 ++ proplists:get_value(Homeland, proplists:get_value("homeland", Opts))
+                 ++ proplists:get_value(Class, Mod:class()),
+    lists:foldl(fun(I, M) -> tweak(I, M) end, Mob, Influences).
 
-shift(Mob, Influences) ->
-    tweak(Mob, resolve(Influences)).
-
-tweak(Mob, []) ->
-    Mob;
-tweak(Mob, [{aliases, List} | Influences]) ->
-    tweak(edit(aliases, lists:append(List, read(aliases, Mob)), Mob), Influences);
-tweak(Mob, [{Key, Magnitude} | Influences]) ->
-    tweak(edit(Key, (read(Key, Mob) + Magnitude), Mob), Influences).
-
-resolve(Influences) ->
-    resolve([], lists:flatten(Influences)).
-
-resolve(Data, []) ->
-    Data;
-resolve(Data, [{Key, {Min, Mean, Max}} | Influences]) ->
-    resolve([{Key, em_lib:roll(Min, Mean, Max)} | Data], Influences);
-resolve(Data, [I | Influences]) ->
-    resolve([I | Data], Influences).
-
-adjust(Mob, []) ->
-    Mob;
-adjust(Mob, [{aliases, List} | Influences]) ->
-    adjust(edit(aliases, lists:append(List, read(aliases, Mob)), Mob), Influences);
-adjust(Mob, [{Key, Value} | Data]) ->
-    adjust(edit(Key, Value, Mob), Data).
+tweak({Attribute, {set, Value}}, Mob) ->
+    edit(Attribute, Value, Mob);
+tweak({Attribute, {roll, MMM}}, Mob) ->
+    edit(Attribute, em_lib:roll(MMM), Mob);
+tweak({Attribute, {add, Value}}, Mob) ->
+    edit(Attribute, (read(Attribute, Mob) + Value), Mob);
+tweak({Attribute, {append, Value}}, Mob) ->
+    edit(Attribute, (Value ++ read(Attribute, Mob)), Mob).
 
 topoff(Mob) ->
     MaxHP = read(max_hp, Mob),

@@ -1,5 +1,5 @@
 -module(telcon_humanoid).
--export([observe/2, prompt/1, actions/0, alias/0, solicit_char/4]).
+-export([observe/2, prompt/1, actions/0, alias/0]).
 
 %% Semantic event -> text translation
 observe(Event, Minion) ->
@@ -168,19 +168,6 @@ alias() ->
      {"west", "go west"},
      {"down", "go down"},
      {"up", "go up"}].
-
-solicit_char(Name, Species, Picker, State) ->
-    Detail = proplists:get_value(Species, mob_humanoid:species()),
-    {Sex, Morph} = Picker("Sex?", proplists:get_value("sex", Detail), State),
-    {Homeland, HI} = Picker("Homeland?", proplists:get_value("homeland", Detail), State),
-    {_, LocID} = Picker("Starting Location?", proplists:get_value("loc", Detail), State),
-    {Class, CI} = Picker("Class?", mob_humanoid:class(), State),
-    PersData = [{ilk, mob_humanoid}, {species, "human"},
-                {sex, Sex}, {homeland, Homeland}, {loc_id, LocID}, {class, Class}],
-    Base = mob:roll(Name, Morph),
-    Persona = mob:adjust(Base, PersData),
-    Mob = mob:shift(Persona, [HI, CI]),
-    mob:topoff(Mob).
 
 %% System
 note(String, Args) ->

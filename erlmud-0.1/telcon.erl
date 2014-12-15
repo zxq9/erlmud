@@ -389,16 +389,16 @@ charmake(State, String) ->
     {Message, State}.
 
 charcreate(Name, State = {_, Handle, _, _, _}) ->
-    {SpecName, SpecMod} = ask_species(State),
-    SpecCon = SpecMod:con_ext(text),
-    Char = SpecCon:solicit_char(Name, SpecName, fun pickone/3, State),
-    case charman:make(Handle, Char) of
+    Available = lists:foldl(fun(Mod, Opts) -> Mod:species() ++ Opts end, [], mobman:playable()),
+    {RollStats, SpecOpts} = pickone("What species?", Available, State),
+    Picker = fun({Label, Opt}, I) -> I ++ pickone(Label, Opt, State) end,
+    Influences = lists:foldl(Picker, RollStats, SpecOpts),
+    {_, Ilk} = proplists:get_value(ilk, Influences),
+    Mob = mob:topoff(mob:roll(Name, Influences ++ pickone("What class?", Ilk:class(), State))),
+    case charman:make(Handle, Mob) of
         ok              -> io_lib:format("~ts created.", [Name]);
         {error, exists} -> "Someone just swiped that name!"
     end.
-
-ask_species(State) ->
-    pickone("What species?", mobman:species_index(), State).
 
 chardrop(State, []) ->
     {bargle(), State};
@@ -425,7 +425,7 @@ pickone(Question, Index, Speaker, State = {Talker, _, _, _, _}) ->
             Speaker("That's not an option. Typo? Try again.", State),
             pickone(Question, Index, State);
         {_, Name} ->
-            proplists:lookup(Name, Index)
+            proplists:get_value(Name, Index)
     end.
 
 menufy(Index) ->
