@@ -50,11 +50,13 @@ roll(Min, Mean, Max) ->
     Pull = random:uniform(),
     Z = if
         Base == Peak -> Base; 
-        Base >  Peak -> (((Base - Peak) * Pull) + Base) / 2;
-        Base <  Peak -> (((Peak - Base) * Pull) + Base) / 2
+        Base >  Peak -> (((Base - Peak) * Pull) + Base) / (1 + Pull);
+        Base <  Peak -> (((Peak - Base) * Pull) + Base) / (1 + Pull)
     end,
     round(Z + Min).
 
+bracket(_, 0, _) ->
+    1;
 bracket(Index, Range, Layers) ->
     (Index * Layers) div ((Range * Layers) div Layers).
 

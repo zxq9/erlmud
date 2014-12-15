@@ -393,8 +393,7 @@ charcreate(Name, State = {_, Handle, _, _, _}) ->
     {RollStats, SpecOpts} = pickone("What species?", Available, State),
     Picker = fun({Label, Opt}, I) -> I ++ pickone(Label, Opt, State) end,
     Influences = lists:foldl(Picker, RollStats, SpecOpts),
-    {_, Ilk} = proplists:get_value(ilk, Influences),
-    Mob = mob:topoff(mob:roll(Name, Influences ++ pickone("What class?", Ilk:class(), State))),
+    Mob = mob:topoff(mob:roll(Name, Influences)),
     case charman:make(Handle, Mob) of
         ok              -> io_lib:format("~ts created.", [Name]);
         {error, exists} -> "Someone just swiped that name!"

@@ -254,7 +254,7 @@ me(State) -> em_lib:entity(State).
 check(Attribute, MobPid) -> em_lib:call(MobPid, check, Attribute).
 
 roll(Name, Influences) ->
-    lists:foldl(fun(I, M) -> tweak(I, M) end, new(Name), Influences).
+    lists:foldl(fun tweak/2, new(Name), Influences).
 
 reroll(Mob) ->
     Mod = read(ilk, Mob),
@@ -267,7 +267,7 @@ reroll(Mob) ->
                  ++ proplists:get_value(Sex, proplists:get_value("sex", Opts))
                  ++ proplists:get_value(Homeland, proplists:get_value("homeland", Opts))
                  ++ proplists:get_value(Class, Mod:class()),
-    lists:foldl(fun(I, M) -> tweak(I, M) end, Mob, Influences).
+    lists:foldl(fun tweak/2, Mob, Influences).
 
 tweak({Attribute, {set, Value}}, Mob) ->
     edit(Attribute, Value, Mob);
