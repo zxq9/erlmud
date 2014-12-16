@@ -389,7 +389,8 @@ charmake(State, String) ->
     {Message, State}.
 
 charcreate(Name, State = {_, Handle, _, _, _}) ->
-    Available = lists:foldl(fun(Mod, Opts) -> Mod:species() ++ Opts end, [], mobman:playable()),
+    Assemble = fun(Mod, Opts) -> Mod:species() ++ Opts end,
+    Available = lists:foldl(Assemble, [], mobman:playable()),
     {RollStats, SpecOpts} = pickone("What species?", Available, State),
     Picker = fun({Label, Opt}, I) -> I ++ pickone(Label, Opt, State) end,
     Influences = lists:foldl(Picker, RollStats, SpecOpts),

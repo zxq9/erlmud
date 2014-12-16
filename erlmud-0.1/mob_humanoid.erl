@@ -127,6 +127,10 @@ unobservable(look, _, State) ->
     State;
 unobservable(status, _, State) ->
     mob:read(con_pid, State) ! {observation, {status, self, State}},
+    State;
+unobservable(inventory, _, State) ->
+    InvList = mob:read(held, State),
+    mob:read(con_pid, State) ! {observation, {inventory, self, InvList}},
     State.
 
 emit(LocPid, State, Action, Actor, Outcome) ->

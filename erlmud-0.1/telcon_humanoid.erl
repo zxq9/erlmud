@@ -12,6 +12,8 @@ observe(Event, Minion) ->
             Speaker ++ " says,\"" ++ Line ++ "\"";
         {status, self, MobState} ->
             render_status(MobState);
+        {inventory, self, InvList} ->
+            render_inventory(InvList);
         {{arrive, Direction}, self, success} ->
             "You arrive from " ++ Direction ++ ".";
         {{arrive, Direction}, Actor, success} ->
@@ -98,6 +100,12 @@ render_status(Mob) ->
                    CurHP, MaxHP, CurSP, MaxSP, CurMP, MaxMP,
                    Vis, OB, PB, DB, Abs]).
 
+render_inventory([]) ->
+    "You aren't holding anything.";
+render_inventory(InvList) ->
+    "You are carrying:\r\n  " ++
+    string:join(lists:reverse(lists:foldl(fun render_entity/2, [], InvList)), "\r\n  ").
+
 render_glance({{_, Species, Class, Homeland, _, _, _, _, _},
                {Desc, {{HP, _, _}, _, _, _, _, _}, {{_, Equip}, {_, Inv}}, _, _, _, _}}) ->
     io_lib:format("You see a ~ts ~ts from ~ts.\r\n"
@@ -108,6 +116,12 @@ render_glance({{_, Species, Class, Homeland, _, _, _, _, _},
                   [Species, Class, Homeland, Desc, Equip, Inv, health(HP)]);
 render_glance({obj, Name, Description}) ->
     io_lib:format("You look at the ~ts and see: ~ts", [Name, Description]).
+
+render_entity({_, _, {Name, _, _, _}}) ->
+    io_lib:format("~ts", [Name]).
+
+render_entity(Entity, Acc) ->
+    [render_entity(Entity) | Acc].
 
 prompt(Pid) ->
     {HP, SP, MP} = mob:check(health, Pid),
@@ -140,7 +154,11 @@ actions() ->
      {"glance", glance, observable,
       "glance Target", "Look at Target"},
      {"take", take, observable,
-      "take Target", "Get somehing from the ground."}].
+      "take Target", "Get somehing from the ground."},
+     {"inventory", inventory, unobservable,
+      "inventory", "Check your carried inventory."},
+     {"equipment", equipment, unobservable,
+      "equipment", "Check your equipped items."}].
 
 alias() ->
     [{"n", "go north"},
@@ -151,6 +169,9 @@ alias() ->
      {"u", "go up"},
      {"l", "look"},
      {"k", "kill"},
+     {"inv", "inventory"},
+     {"eq", "equipment"},
+     {"equip", "equipment"},
      {"8", "go north"},
      {"2", "go south"},
      {"6", "go east"},
