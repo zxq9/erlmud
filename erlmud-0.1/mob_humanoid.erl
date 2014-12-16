@@ -102,31 +102,23 @@ observable(go, Data, State) ->
     mob:edit(loc, NewLoc, State);
 observable(take, Data, State) ->
     {Target, _} = head(Data),
-    Self = self(),
-    TRef = make_ref(),
     LocPid = mob:read(loc_pid, State),
-    Hand = spawn(em_lib, hand, [Self, TRef, Target, LocPid, Self]),
-    Mon = monitor(process, Hand),
-    receive
-        {TRef, {ok, TPid}} ->
-            Name = mob:read(name, State),
-            Taken = {_, _, {TName, _, _}} = em_lib:call(TPid, check, self),
-            NewHeld = [Taken | mob:read(held, State)],
-            NewState = mob:edit(held, NewHeld, State),
-            emit(LocPid, NewState, {take, TName}, Name, success),
-            NewState;
-        {TRef, {error, absent}} ->
-            ConPid = mob:read(con_pid, State),
-            ConPid ! {observation, {{take, Target}, self, failure}},
-            State;
-        {'DOWN', Mon, process, Hand, Reason} ->
-            ConPid = mob:read(con_pid, State),
-            ConPid ! {observation, {{take, Target}, self, failure}},
-            note("Hand ~p failed with ~p", [Hand, Reason]),
-            State
-    after 1000 ->
-        note("Hand ~p timed out.", [Hand]),
-        State
+    Self = self(),
+    spawn_link(fun() -> hand(mob:read(name, State), Target, LocPid, Self) end),
+    State.
+
+hand(Name, Target, HolderPid, RecipientPid) ->
+    TRef = make_ref(),
+    case em_lib:call(HolderPid, transfer, {Target, TRef}) of
+        {ok, TPid} ->
+            link(TPid),
+            TEntity = em_lib:call(TPid, {move, RecipientPid}),
+            ok = em_lib:call(RecipientPid, load, TEntity),
+            unlink(TPid),
+            HolderPid ! {ok, TRef},
+            HolderPid ! {event, {observation, {10000, {take, Name, success}}}};
+        M = {error, _} ->
+            M
     end.
 
 unobservable(look, _, State) ->
@@ -222,14 +214,14 @@ species() ->
         {weight,    {roll, {130000, 160000, 190000}}},
         {max_hp,    {roll, {25, 40, 50}}},
         {max_sp,    {roll, {130, 160, 180}}},
-        {max_mp,    {roll, {10, 20, 30}}},
+        {max_mp,    {roll, {15, 20, 30}}},
         {str,       {roll, {130, 170, 200}}},
         {int,       {roll, {50, 80, 120}}},
         {wil,       {roll, {50, 80, 120}}},
         {dex,       {roll, {100, 140, 190}}},
         {con,       {roll, {90, 140, 190}}},
         {spd,       {roll, {80, 130, 190}}},
-        {morality,  {roll, {-15, -25, -40}}},
+        {morality,  {roll, {-40, -25, -15}}},
         {chaos,     {roll, {-15, 0, 15}}},
         {law,       {roll, {-15, 0, 15}}}],
        [{"sex",
@@ -241,7 +233,7 @@ species() ->
             {weight,        {add, -20000}},
             {max_hp,        {add, -10}},
             {max_sp,        {add, -10}},
-            {max_mp,        {add, 10}}]},
+            {max_mp,        {add, 5}}]},
           {"female",
            [{sex,           {set, "female"}},
             {description,   {set, "A female kinolc."}},
@@ -250,7 +242,7 @@ species() ->
             {weight,        {add, 20000}},
             {max_hp,        {add, 10}},
             {max_sp,        {add, 10}},
-            {max_mp,        {add, -10}}]}]},
+            {max_mp,        {add, -5}}]}]},
         {"homeland",
          [{"Shaik",
            [{homeland,      {set, "Shaik"}},

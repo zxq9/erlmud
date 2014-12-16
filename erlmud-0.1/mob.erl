@@ -22,9 +22,9 @@ new(Name) ->
     WornInv = [],
     WornAli = dict:new(),
     Worn = {WornInv, WornAli},
-    WornWeight = em_lib:calc_weight(WornInv),
-    Carried = inventory:new(),
-    Inventory = {{WornWeight, Worn}, Carried},
+    WornWeight = 0,
+    HeldInv = inventory:new(),
+    Inventory = {{WornWeight, Worn}, HeldInv},
     Effects = [],
     PassiveSkills = [],
     ActiveSkills = [],
@@ -86,6 +86,7 @@ read(worn, Mob)        -> element(2, read(equip, Mob));
 read(worn_inv, Mob)    -> element(1, read(worn, Mob));
 read(worn_ali, Mob)    -> element(2, read(worn, Mob));
 
+read(held_inv, Mob)    -> element(2, read(inventory, Mob));
 read(held, Mob)        -> inventory:to_list(element(2, read(inventory, Mob)));
 read(held_weight, Mob) -> inventory:weight(element(2, read(inventory, Mob)));
 
@@ -210,13 +211,10 @@ edit(inventory, Inv, Mob) ->
 edit(worn_inv, WornInv, Mob) ->
     edit(inventory,
          {{em_lib:calc_weight(WornInv), {WornInv, em_lib:index_aliases(WornInv)}},
-          read(carried, Mob)},
+          read(held_inv, Mob)},
          Mob);
 edit(held_inv, HeldInv, Mob) ->
-    edit(inventory,
-         {read(equip, Mob),
-          {em_lib:calc_weight(HeldInv), {HeldInv, em_lib:index_aliases(HeldInv)}}},
-         Mob);
+    edit(inventory, {read(equip, Mob), HeldInv}, Mob);
 edit(effects, Eff, Mob) ->
     {Desc, Condition, Inv, _, Sk, Sc, Align} = read(status, Mob),
     edit(status, {Desc, Condition, Inv, Eff, Sk, Sc, Align}, Mob);
@@ -326,6 +324,10 @@ loop(State) ->
         {Result, NewState} = Ilk:react(Event, State),
         From ! {Ref, Result},
         loop(NewState);
+    {From, Ref, {load, Entity}} ->
+        NewState = accept(Entity, State),
+        From ! {Ref, ok},
+        loop(NewState);
     {ConPid, divorce} ->
         divorce(State);
     Message = {'DOWN', ConRef, process, ConPid, _} ->
@@ -339,6 +341,12 @@ loop(State) ->
         note("Received ~tp", [Any]),
         loop(State)
   end.
+
+%% Handlers
+accept(Entity = {Pid, _, _}, State) ->
+    link(Pid),
+    NewState = edit(held_inv, inventory:add(Entity, read(held_inv, State)), State),
+    NewState.
 
 %% Magic
 divorce(State) ->

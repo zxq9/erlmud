@@ -71,9 +71,9 @@ render_inventory(_, [], Stuff) ->
     Stuff;
 render_inventory(MPid, [{MPid, _, _} | Inv], Stuff) ->
     render_inventory(MPid, Inv, Stuff);
-render_inventory(MPid, [{_, _, {Name, mob, _}} | Inv], Stuff) ->
+render_inventory(MPid, [{_, _, {Name, mob, _, _}} | Inv], Stuff) ->
     render_inventory(MPid, Inv, [io_lib:format("~ts is standing here.", [Name]) | Stuff]);
-render_inventory(MPid, [{_, _, {Name, obj, _}} | Inv], Stuff) ->
+render_inventory(MPid, [{_, _, {Name, obj, _, _}} | Inv], Stuff) ->
     render_inventory(MPid, Inv, [io_lib:format("~ts is here.", [Name]) | Stuff]).
 
 render_status(Mob) ->
@@ -99,12 +99,12 @@ render_status(Mob) ->
                    Vis, OB, PB, DB, Abs]).
 
 render_glance({{_, Species, Class, Homeland, _, _, _, _, _},
-               {Desc, {HP, _, _}, {{_, Equip}, {_, Inv}}, _, _, _, _}}) ->
+               {Desc, {{HP, _, _}, _, _, _, _, _}, {{_, Equip}, {_, Inv}}, _, _, _, _}}) ->
     io_lib:format("You see a ~ts ~ts from ~ts.\r\n"
                   "~ts\r\n"
                   "Wearing: ~tp\r\n"
                   "Carrying: ~tp\r\n"
-                  "Health: ~ts",
+                  "Appears to be ~ts",
                   [Species, Class, Homeland, Desc, Equip, Inv, health(HP)]);
 render_glance({obj, Name, Description}) ->
     io_lib:format("You look at the ~ts and see: ~ts", [Name, Description]).
@@ -114,15 +114,15 @@ prompt(Pid) ->
     io_lib:format("(~ts, ~ts, ~ts) $ ", [health(HP), stamina(SP), magika(MP)]).
 
 health({Current, Max}) ->
-    Ratings = ["Critical", "Beaten", "Wounded", "Hurt", "Scratched", "Healthy"],
+    Ratings = ["critical", "beaten", "wounded", "hurt", "scratched", "healthy"],
     rate(Current, Max, Ratings).
 
 stamina({Current, Max}) ->
-    Ratings = ["Bonked", "Haggard", "Winded", "Tiring", "Strong", "Fresh"],
+    Ratings = ["bonked", "haggard", "winded", "tired", "strong", "fresh"],
     rate(Current, Max, Ratings).
 
 magika({Current, Max}) ->
-    Ratings = ["Zonked", "Migrane", "Headache", "Distracted", "Focused", "Enflow"],
+    Ratings = ["zonked", "migrane", "headachy", "distracted", "focused", "enflow"],
     rate(Current, Max, Ratings).
 
 rate(Index, Range, Ratings) ->

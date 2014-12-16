@@ -166,7 +166,10 @@ transfer(From, Ref, {Target, TRef}, Inventory) ->
         M = {ok, TPid}    ->
             From ! {Ref, M},
             receive
-                {ok, TRef} -> inventory:drop_pid(TPid, Inventory)
+                {ok, TRef} ->
+                    note("Got TRef ~p", [TRef]),
+                    {ok, NewInventory} = inventory:drop_pid(TPid, Inventory),
+                    NewInventory
                 after 1000 -> exit({error, stalled_transfer})
             end;
         M = {error, _} ->

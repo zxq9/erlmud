@@ -1,7 +1,7 @@
 -module(em_lib).
 -export([note/3, broadcast/2, call/2, call/3, incoming/2,
-         calc_weight/1, weight/1, roll/1, roll/3, bracket/3,
-         entity/1, hand/5]).
+         roll/1, roll/3, bracket/3,
+         entity/1]).
 
 note(Module, String, Args) ->
     S = "~p ~p: " ++ String ++ "~n",
@@ -33,27 +33,25 @@ call(Proc, Verb, Data) ->
 incoming(Pid, Event) ->
     call(Pid, incoming, Event).
 
-calc_weight(Entities) ->
-    SumWeight = fun(Entity, A) -> weight(Entity) + A end,
-    lists:foldl(SumWeight, 0, Entities).
-
-weight(Entity = {{Mod, _}, _}) ->
-    Mod:total_weight(Entity).
-
 roll({Min, Mean, Max}) ->
     roll(Min, Mean, Max).
 
 roll(Min, Mean, Max) ->
-    Span = Max - Min,
-    Peak = Mean - Min,
+    Offset = if
+        Min <  0 -> abs(Min);
+        Min == 0 -> Min;
+        Min >  0 -> -Min
+    end,
+    Span = Max + Offset,
+    Peak = Mean + Offset,
     Base = random:uniform(Span),
     Pull = random:uniform(),
     Z = if
         Base == Peak -> Base; 
-        Base >  Peak -> (((Base - Peak) * Pull) + Base) / (1 + Pull);
-        Base <  Peak -> (((Peak - Base) * Pull) + Base) / (1 + Pull)
+        Base >  Peak -> ((((Base - Peak) * Pull) + Peak) + Base) / 2;
+        Base <  Peak -> ((((Peak - Base) * Pull) + Peak) + Base) / 2
     end,
-    round(Z + Min).
+    round(Z - Offset).
 
 bracket(_, 0, _) ->
     1;
@@ -66,17 +64,3 @@ entity(State = {{Mod, _}, _}) ->
     Weight = Mod:read(total_weight, State),
     Vis= Mod:read(vis, State),
     {self(), Aliases, {Name, Mod, Weight, Vis}}.
-
-hand(Requestor, TRef, Target, HolderPid, RecipientPid) ->
-    Result = case call(HolderPid, transfer, {Target, TRef}) of
-        M = {ok, TPid} ->
-            link(TPid),
-            TEntity = call(TPid, {move, RecipientPid}),
-            ok = call(RecipientPid, load, {TPid, TEntity}),
-            unlink(TPid),
-            HolderPid ! {ok, TRef},
-            M;
-        M = {error, _} ->
-            M
-    end,
-    Requestor ! {TRef, Result}.
