@@ -11,7 +11,11 @@
 
 %% Startup
 start_link(Talker) ->
-    spawn_link(fun() -> welcome(Talker) end).
+    spawn_link(fun() -> init(Talker) end).
+
+init(Talker) ->
+    random:seed(now()),
+    welcome(Talker).
 
 %% Authentication & Registration
 welcome(Talker) ->

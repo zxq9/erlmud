@@ -40,10 +40,25 @@ evaluate(observable, {Verb, Data}, State) ->
 evaluate(unobservable, {Verb, Data}, State) ->
     unobservable(Verb, Data, State).
 
+% NOTE: A few different ways 
+%       Compare with telcon_humanoid:render_glance/1
 react({glance, _}, State) ->
-    Info = mob:read(info, State),
-    Status = mob:read(status, State),
-    {{ok, {Info, Status}}, State};
+    View = {mob:read(species, State),
+            mob:read(class, State),
+            mob:read(homeland, State),
+            mob:read(description, State),
+            mob:read(hp, State),
+            mob:read(worn, State),
+            mob:read(held, State)},
+    {{ok, View}, State};
+
+%   Visible = [species, class, homeland, description, hp, worn, held],
+%   View = lists:foldl(fun(V, Acc) -> [{V, mob:read(V, State)} | Acc] end, [], Visible),
+%   {{ok, View}, State};
+
+%   Visible = [species, class, homeland, description, hp, worn, held],
+%   View = lists:foldl(fun(V, Acc) -> [mob:read(V, State) | Acc] end, [], Visible),
+%   {{ok, list_to_tuple(lists:reverse(View))}, State};
 react(Event, State) ->
     note("Received ~p", [Event]),
     {{ok, "You got me."}, State}.

@@ -80,10 +80,14 @@ read(skills, Mob)      -> element(5, read(status, Mob));
 read(score, Mob)       -> element(6, read(status, Mob));
 read(alignment, Mob)   -> element(7, read(status, Mob));
 
+% TODO
+% Make an inventory-like type that receives a list of slots
+% but behaves similarly to the inventory module:
+%   Equip = equip:new(Slots)
 read(equip, Mob)       -> element(1, read(inventory, Mob));
 read(worn_weight, Mob) -> element(1, read(equip, Mob));
-read(worn, Mob)        -> element(2, read(equip, Mob));
-read(worn_inv, Mob)    -> element(1, read(worn, Mob));
+read(worn_inv, Mob)    -> element(2, read(equip, Mob));
+read(worn, Mob)        -> element(1, read(worn_inv, Mob));
 read(worn_ali, Mob)    -> element(2, read(worn, Mob));
 
 read(held_inv, Mob)    -> element(2, read(inventory, Mob));
