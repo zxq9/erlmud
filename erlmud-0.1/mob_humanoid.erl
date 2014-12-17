@@ -1,7 +1,6 @@
 -module(mob_humanoid).
--export([observe/3, evaluate/3, react/2,
+-export([observe/3, perform/3, react/2,
          level/1, species/0,
-         head/1,
          con_ext/1]).
 
 %% Interface
@@ -35,14 +34,44 @@ perceive(Magnitude, {Action, Actor, Outcome}, ConPid, _, State) ->
     end,
     State.
 
-evaluate(observable, {Verb, Data}, State) ->
-    observable(Verb, Data, State);
-evaluate(unobservable, {Verb, Data}, State) ->
-    unobservable(Verb, Data, State).
+perform(go, Exit, State) ->
+    go(Exit,
+       mob:read(loc, State),
+       mob:read(loc_pid, State),
+       mob:read(name, State),
+       mob:read(con_pid, State),
+       mob:me(State),
+       State);
+perform(say, Words, State) ->
+    say(Words, mob:read(name, State), mob:read(loc_pid, State), State),
+    State;
+perform(status, self, State) ->
+    status(mob:read(con_pid, State), State),
+    State;
+perform(look, loc, State) ->
+    View = loc:look(mob:read(loc_pid, State)),
+    mob:read(con_pid, State) ! {observation, {look, self, View}},
+    State;
+perform(look, Target, State) ->
+    look(Target,
+         mob:read(name, State),
+         mob:read(con_pid, State),
+         mob:read(loc_pid, State),
+         State),
+    State;
+perform(take, Target, State) ->
+    take(Target, self(), mob:read(name, State), mob:read(loc_pid, State)),
+    State;
+perform(inventory, self, State) ->
+    mob:read(con_pid, State) ! {observation, {inventory, self, mob:read(held, State)}},
+    State;
+perform(equipment, self, State) ->
+    mob:read(con_pid, State) ! {observation, {equipment, self, mob:read(worn, State)}},
+    State.
 
 % NOTE: A few different ways 
-%       Compare with telcon_humanoid:render_glance/1
-react({glance, _}, State) ->
+%       Compare with telcon_humanoid:render_look/1
+react({look, _}, State) ->
     View = {mob:read(species, State),
             mob:read(class, State),
             mob:read(homeland, State),
@@ -63,64 +92,67 @@ react(Event, State) ->
     note("Received ~p", [Event]),
     {{ok, "You got me."}, State}.
 
-con_ext(text) -> telcon_humanoid.
-
-%% Magic
-detect(Magnitude, _) -> Magnitude > 1.
-
-observable(glance, Data, State) ->
-    ConPid = mob:read(con_pid, State),
-    Name = mob:read(name, State),
-    LocPid = mob:read(loc_pid, State),
-    case head(Data) of
-        {Name, _} ->
-            emit(LocPid, State, {glance, Name}, Name, failure);
-        {Target, _} -> 
-            case loc:action(LocPid, Target, {glance, Name}) of
-                {ok, View} ->
-                    emit(LocPid, State, {glance, Target}, Name, success),
-                    ConPid ! {observation, {{glance, Target}, self, View}};
-                {error, self} ->
-                    emit(LocPid, State, {glance, Name}, Name, failure);
-                {error, _} ->
-                    emit(LocPid, State, {glance, Target}, Name, failure)
-            end
-    end,
-    State;
-observable(say, Data, State) ->
-    Name = mob:read(name, State),
-    LocPid = mob:read(loc_pid, State),
-    emit(LocPid, State, {say, Data}, Name, success),
-    State;
-observable(go, Data, State) ->
-    ConPid = mob:read(con_pid, State),
-    Name = mob:read(name, State),
-    Loc = mob:read(loc, State),
-    LocPid = mob:read(loc_pid, State),
-    {Target, _} = head(Data),
-    Me = mob:me(State),
-    NewLoc = case go(Target, Me, LocPid) of
+%% Action implementations
+go(Exit, Loc, LocPid, Name, ConPid, Me, State) ->
+    NewLoc = case depart(Exit, Me, LocPid) of
         {{ok, New = {_, NewLocPid}}, OutName} ->
-            emit(LocPid, State, {depart, Target}, Name, success),
+            emit(LocPid, State, {depart, Exit}, Name, success),
             emit(NewLocPid, State, {arrive, OutName}, Name, success),
             View = loc:look(NewLocPid),
             ConPid ! {observation, {look, self, View}},
             New;
         {error, noexit} ->
-            emit(LocPid, State, {depart, Target}, Name, failure),
+            emit(LocPid, State, {depart, Exit}, Name, failure),
             Loc;
         Res = {fail, {_, New = {_, NewLocPid}}} ->
             note("Received ~p from loc:depart/3", [Res]),
             emit(NewLocPid, State, jump, Name, success),
             New
     end,
-    mob:edit(loc, NewLoc, State);
-observable(take, Data, State) ->
-    {Target, _} = head(Data),
-    LocPid = mob:read(loc_pid, State),
-    Self = self(),
-    spawn_link(fun() -> hand(mob:read(name, State), Target, LocPid, Self) end),
-    State.
+    mob:edit(loc, NewLoc, State).
+
+say(Words, Name, LocPid, State) ->
+    emit(LocPid, State, {say, Words}, Name, success).
+
+status(ConPid, State) ->
+    ConPid ! {observation, {status, self, State}}.
+
+look(Target, Name, ConPid, LocPid, State) ->
+    case loc:action(LocPid, Target, {look, Name}) of
+        {ok, View} ->
+            emit(LocPid, State, {look, Target}, Name, success),
+            ConPid ! {observation, {{look, Target}, self, View}};
+        {error, self} ->
+            emit(LocPid, State, {look, Name}, Name, failure);
+        {error, _} ->
+            emit(LocPid, State, {look, Target}, Name, failure)
+    end.
+
+take(Target, Self, Name, LocPid) ->
+    spawn_link(fun() -> hand(Name, Target, LocPid, Self) end).
+
+%% Magic
+con_ext(text) -> telcon_humanoid.
+
+detect(Magnitude, _) -> Magnitude > 1.
+
+emit(LocPid, State, Action, Actor, Outcome) ->
+    Magnitude = magnitude(Action, State),
+    Signal = {Magnitude, {Action, Actor, Outcome}},
+    loc:event(LocPid, {observation, Signal}).
+
+magnitude(_, _) -> 10000.
+
+depart(Target, Me, LocPid) ->
+    case loc:depart(LocPid, Me, Target) of
+        {ok, WayPid, OutName} ->
+            {way:enter(WayPid, Me), OutName};
+        Error = {error, _} ->
+            Error;
+        Res = {fail, _} ->
+            note("Received ~p from loc:depart/3", [Res]),
+            {fail, mobman:relocate(Me)}
+    end.
 
 hand(Name, Target, HolderPid, RecipientPid) ->
     TRef = make_ref(),
@@ -136,38 +168,7 @@ hand(Name, Target, HolderPid, RecipientPid) ->
             M
     end.
 
-unobservable(look, _, State) ->
-    View = loc:look(mob:read(loc_pid, State)),
-    mob:read(con_pid, State) ! {observation, {look, self, View}},
-    State;
-unobservable(status, _, State) ->
-    mob:read(con_pid, State) ! {observation, {status, self, State}},
-    State;
-unobservable(inventory, _, State) ->
-    InvList = mob:read(held, State),
-    mob:read(con_pid, State) ! {observation, {inventory, self, InvList}},
-    State.
-
-emit(LocPid, State, Action, Actor, Outcome) ->
-    Magnitude = magnitude(Action, State),
-    Signal = {Magnitude, {Action, Actor, Outcome}},
-    loc:event(LocPid, {observation, Signal}).
-
-magnitude(_, _) -> 10000.
-
-go(Target, Me, LocPid) ->
-    case loc:depart(LocPid, Me, Target) of
-        {ok, WayPid, OutName} ->
-            {way:enter(WayPid, Me), OutName};
-        Error = {error, _} ->
-            Error;
-        Res = {fail, _} ->
-            note("Received ~p from loc:depart/3", [Res]),
-            {fail, mobman:relocate(Me)}
-    end.
-
 %% Definitions
-
 level(Exp) ->
     Levels = [1, 50, 100, 200, 400, 800, 1600],
     length(lists:takewhile(fun(X) -> Exp > X end, Levels)).
@@ -323,31 +324,6 @@ class() ->
          {morality,   {add, 15}},
          {chaos,      {add, -20}},
          {law,        {add, 5}}]}]}].
-
-%% Binary & String handling
-head(Line) ->
-    Stripped = string:strip(Line),
-    case head([], Stripped) of
-        Z = {{_, _}, _} -> Z;
-        {Head, Tail}   -> {lists:reverse(Head), Tail}
-    end.
-
-head(Word, []) ->
-    {Word, []};
-head([], [$\s|T]) ->
-    head([], T);
-head(Word, [H|T]) ->
-    case H of
-        $\s ->
-            {Word, T};
-%       $. when is_number(Word) ->
-        $. ->
-            Index = list_to_integer(lists:reverse(Word)),
-            {Target, Rest} = head(T),
-            {{Index, Target}, Rest};
-        Z ->
-            head([Z|Word], T)
-    end.
 
 %% System
 note(String, Args) ->

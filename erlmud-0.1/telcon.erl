@@ -78,17 +78,17 @@ authenticate(Talker, Handle) ->
     end.
 
 init(Talker, Handle) ->
-    Minion = {none, none, none, init_actions(none)},
+    Minion = {none, none, none, none, init_m_help(none)},
     Aliases = [],
     Channels = [],
     State = {Talker, Handle, Aliases, Minion, Channels},
     loop(State).
 
-init_actions(none) -> [];
-init_actions(Ilk)  -> Ilk:actions().
+init_m_help(none) -> [];
+init_m_help(Ext)  -> Ext:help().
 
 %% Service
-loop(State = {Talker, Handle, Aliases, Minion = {Ilk, MPid, MRef, Actions}, Channels}) ->
+loop(State = {Talker, Handle, Aliases, Minion = {Ext, Name, MPid, MRef, MHelp}, Channels}) ->
   receive
     {received, Bin} ->
         NewState = evaluate(Bin, State),
@@ -97,23 +97,25 @@ loop(State = {Talker, Handle, Aliases, Minion = {Ilk, MPid, MRef, Actions}, Chan
         handle_chat(Message, State),
         loop(State);
     {observation, Event} ->
-        case Ilk of
+        case Ext of
             none -> note("Received ~tp~n", [Event]);
-            Ilk  -> emit(Ilk:observe(Event, Minion), State)
+            Ext  -> emit(Ext:observe(Event, Minion), State)
         end,
         loop(State);
     {system, Message} ->
         unprompted(Message, State),
         loop(State);
     {'DOWN', MRef, process, MPid, _Reason} ->
-        unprompted("Your minion vanished in a puff of smoke!", State),
-        Actions = init_actions(none),
-        loop({Talker, Handle, Aliases, {none, none, none, Actions}, Channels});
+        Message = io_lib:format("Your minion, ~ts, vanished in a puff of smoke!", [Name]),
+        unprompted(Message, State),
+        MHelp = init_m_help(none),
+        loop({Talker, Handle, Aliases, {none, none, none, none, MHelp}, Channels});
     Message = {'DOWN', _, process, _, _} ->
         NewState = handle_down(State, Message),
         loop(NewState);
     status ->
-        note("Status:~n  Talker: ~p~n  Handle: ~p~n  Minion: ~p~n Channels: ~p",
+        note("Status:~n  Talker: ~p~n  Handle: ~p~n"
+             "  Aliases: ~p~n  Minion: ~p~n Channels: ~p",
              [Talker, Handle, Aliases, Minion, Channels]),
         loop(State);
     code_change ->
@@ -148,15 +150,12 @@ interpret(Expansion, State = {_, _, _, Minion, Channels}) ->
         _       -> {perform(Keyword, Line, Minion), State}
     end.
 
-perform(_, _, {none, _, _, _}) ->
+perform(_, _, {none, _, _, _, _}) ->
     bargle();
-perform(Keyword, String, {_, MPid, _, Actions}) ->
-    case lists:keyfind(Keyword, 1, Actions) of
-        {_, Command, Nature, _, _} ->
-            MPid ! {action, {Nature, {Command, String}}},
-            none;
-        false ->
-            bargle()
+perform(Keyword, String, {Ext, Name, MPid, _, _}) ->
+    case Ext:perform(Keyword, String, Name, MPid) of
+        {ok, Res} -> Res;
+        bargle    -> bargle()
     end.
 
 handle_chat(Message, State) ->
@@ -226,14 +225,10 @@ quit(Talker, Handle) ->
     Talker ! {send, Message},
     exit(quit).
 
-help({_, _, _, []}) ->
-    sys_help() ++ gray("    [None]");
-help({_, _, _, Actions}) ->
-    Sys = sys_help(),
-    Act = string:join([string:left(yellow(Command), 23) ++ gray("- " ++ Desc)
-                       || {_, _, _, Command, Desc} <- Actions],
-                      "\r\n    "),
-    string:join([Sys, Act], "    ").
+help({_, _, _, _, []}) ->
+    sys_help();
+help({_, _, _, _, MHelp}) ->
+    sys_help() ++ MHelp.
 
 %% Chat
 chan(State = {_, _, _, _, Channels}, Line) ->
@@ -351,19 +346,19 @@ charlist(State = {_, Handle, _, _, _}) ->
     Response = "  Your chars:\r\n    " ++ Mobs,
     {Response, State}.
 
-charload(State = {Talker, Handle, _, {none, _, _, _}, Channels}, String) ->
+charload(State = {Talker, Handle, _, {none, _, _, _, _}, Channels}, String) ->
     {Name, _} = head(String),
     case charman:load(Handle, Name) of
         {error, owner} ->
             Message = Name ++ " is not one of your characters.",
             {Message, State};
         {ok, CharData = {{Mod, _}, _}} ->
-            Ilk = (Mod:read(ilk, CharData)):con_ext(text),
+            Ext = (Mod:read(ilk, CharData)):con_ext(text),
             CharPid = mobman:spawn_mob(CharData),
             CharRef = monitor(process, CharPid),
-            Actions = init_actions(Ilk),
-            Minion = {Ilk, CharPid, CharRef, Actions},
-            NewAliases = Ilk:alias(),
+            MHelp = init_m_help(Ext),
+            Minion = {Ext, Mod:read(name, CharData), CharPid, CharRef, MHelp},
+            NewAliases = Ext:alias(),
             NewState = {Talker, Handle, NewAliases, Minion, Channels},
             Message = "A new reality grips you...",
             {Message, NewState}
@@ -372,14 +367,14 @@ charload(State, _) ->
     Message = "You already control a character.",
     {Message, State}.
 
-charquit(State = {_, _, _, {none, _, _, _}, _}) ->
+charquit(State = {_, _, _, {none, _, _, _, _}, _}) ->
     Message = "No characters to unload.",
     {Message, State};
-charquit({Talker, Handle, _, {_, CharPid, CharRef, _}, Channels}) ->
+charquit({Talker, Handle, _, {_, Name, CharPid, CharRef, _}, Channels}) ->
     demonitor(CharRef),
     CharPid ! {self(), divorce},
-    NewState = {Talker, Handle, [], {none, none, none, []}, Channels},
-    Message = "You're such a quitter.",
+    NewState = {Talker, Handle, [], {none, none, none, none, []}, Channels},
+    Message = Name ++ " is so disappointed in you...",
     {Message, NewState}.
 
 charmake(State, []) ->
@@ -442,10 +437,10 @@ menufy(Index) ->
 emit(silent, _)      -> ok;
 emit(Message, State) -> unprompted(Message, State).
 
-prompt({_, Handle, _, {none, _, _, _}, _}) ->
+prompt({_, Handle, _, {none, _, _, _, _}, _}) ->
     gray(Handle ++ " $ ");
-prompt({_, _, _, {Ilk, MPid, _, _}, _}) ->
-    gray(Ilk:prompt(MPid)).
+prompt({_, _, _, {Ext, _, MPid, _, _}, _}) ->
+    gray(Ext:prompt(MPid)).
 
 unprompted(Data, State = {Talker, _, _, _, _}) ->
     % TODO: Find a better way to clear the current line...
@@ -460,43 +455,42 @@ greet() ->
 
 sys_help() ->
     white("  Available commands:\r\n") ++
-    gray("    chat Channel Text      - Send Text to everyone in Channel\r\n"
-         "    sys Command [Args]     - Execute system Command\r\n"
-         "    help                   - Display this message\r\n"
-         "\r\n") ++
+    gray( "    chat Channel Text      - Send Text to everyone in Channel\r\n"
+          "    sys Command [Args]     - Execute system Command\r\n"
+          "    help                   - Display this message\r\n"
+          "\r\n") ++
     white("  Command is one of:\r\n") ++
-    gray("    char [Args]            - Invoke character commands\r\n"
-         "    chan [Args]            - Invoke channel commands\r\n"
-         "    alias [Args]           - Invoke alias commands\r\n"
-         "    echo Text              - Echo Text back to your terminal\r\n"
-         "    quit                   - Disconnect abruptly\r\n"
-         "\r\n") ++
+    gray( "    char [Args]            - Invoke character commands\r\n"
+          "    chan [Args]            - Invoke channel commands\r\n"
+          "    alias [Args]           - Invoke alias commands\r\n"
+          "    echo Text              - Echo Text back to your terminal\r\n"
+          "    quit                   - Disconnect abruptly\r\n"
+          "\r\n") ++
     white("  Character commands:\r\n") ++
-    gray("    list OR (nothing)      - List your characters\r\n"
-         "    CharacterName          - Display character status\r\n"
-         "    load Name              - Take control of character\r\n"
-         "    quit                   - Release control of current chatacter\r\n"
-         "    make Name              - Create a new character\r\n"
-         "\r\n") ++
+    gray( "    list OR (nothing)      - List your characters\r\n"
+          "    CharacterName          - Display character status\r\n"
+          "    load Name              - Take control of character\r\n"
+          "    quit                   - Release control of current chatacter\r\n"
+          "    make Name              - Create a new character\r\n"
+          "\r\n") ++
     white("  Channel commands:\r\n") ++
-    gray("    list OR (nothing)      - List system chat channels\r\n"
-         "    ChannelName            - Display user count and handle list\r\n"
-         "    join Channel           - Join or create the named Channel\r\n"
-         "    leave Channel          - Leave the named Channel\r\n"
-         "\r\n") ++
+    gray( "    list OR (nothing)      - List system chat channels\r\n"
+          "    ChannelName            - Display user count and handle list\r\n"
+          "    join Channel           - Join or create the named Channel\r\n"
+          "    leave Channel          - Leave the named Channel\r\n"
+          "\r\n") ++
     white("  Alias commands:\r\n") ++
-    gray("    list OR (nothing)      - List current command aliases\r\n"
-         "    Alias Text             - Set Alias to Text\r\n"
-         "    clear                  - Clear all aliases\r\n"
-         "    clear Alias            - Clear Alias\r\n"
-         "    default                - Reset aliases to default\r\n"
-         "\r\n") ++
+    gray( "    list OR (nothing)      - List current command aliases\r\n"
+          "    Alias Text             - Set Alias to Text\r\n"
+          "    clear                  - Clear all aliases\r\n"
+          "    clear Alias            - Clear Alias\r\n"
+          "    default                - Reset aliases to default\r\n"
+          "\r\n") ++
     white("  Shortcuts:\r\n") ++
-    gray("    !Channel Text      OR   chat Channel Text\r\n"
-         "    /Command [Args]    OR   sys Command [Args]\r\n"
-         "    ?                  OR   help\r\n"
-         "\r\n") ++
-    white("  Available Actions:\r\n").
+    gray( "    !Channel Text      OR   chat Channel Text\r\n"
+          "    /Command [Args]    OR   sys Command [Args]\r\n"
+          "    ?                  OR   help\r\n"
+          "\r\n").
 
 %% Handler
 handle_down(State = {Talker, Handle, Minion, Channels},

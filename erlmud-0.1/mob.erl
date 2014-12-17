@@ -305,7 +305,7 @@ locless(Me, MobData) ->
 enter_world(State) ->
     loc:event(read(loc_pid, State),
               {observation, {read(vis, State), {warp, read(name, State), success}}}),
-    self() ! {action, {unobservable, {look, []}}},
+    self() ! {action, {look, loc}},
     loop(State).
 
 %% Life!
@@ -319,9 +319,9 @@ loop(State) ->
         Ilk = read(ilk, State),
         NewState = Ilk:observe(Magnitude, Event, State),
         loop(NewState);
-    {action, {Nature, Data}} ->
+    {action, {Verb, Data}} ->
         Ilk = read(ilk, State),
-        NewState = Ilk:evaluate(Nature, Data, State),
+        NewState = Ilk:perform(Verb, Data, State),
         loop(NewState);
     {From, Ref, {incoming, Event}} ->
         Ilk = read(ilk, State),

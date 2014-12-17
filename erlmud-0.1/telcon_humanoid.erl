@@ -1,5 +1,5 @@
 -module(telcon_humanoid).
--export([observe/2, prompt/1, actions/0, alias/0]).
+-export([observe/2, prompt/1, perform/4, help/0, alias/0]).
 
 %% Semantic event -> text translation
 observe(Event, Minion) ->
@@ -56,7 +56,7 @@ observe(Event, Minion) ->
     end.
 
 render_location({Name, Description, Inventory, Exits},
-                {_, MPid, _, _}) ->
+                {_, _, MPid, _, _}) ->
     ExitNames = string:join([N || {N, _, _, _} <- Exits], " "),
     Stuff = string:join(render_inventory(MPid, Inventory), "\r\n"),
     io_lib:format(telcon:cyan("~ts\r\n") ++
@@ -153,23 +153,66 @@ magika({Current, Max}) ->
 rate(Index, Range, Ratings) ->
     lists:nth(em_lib:bracket(Index, Range, length(Ratings)), Ratings).
 
-actions() ->
-    [{"go", go, observable,
-      "go Exit", "Move to a new location through Exit"},
-     {"say", say, observable,
-      "say Text", "Say something out loud"},
-     {"status", status, unobservable,
-      "status", "Check your character's current status"},
-     {"look", look, unobservable,
-      "look", "View your surroundings"},
-     {"glance", glance, observable,
-      "glance Target", "Look at Target"},
-     {"take", take, observable,
-      "take Target", "Get somehing from the ground."},
-     {"inventory", inventory, unobservable,
-      "inventory", "Check your carried inventory."},
-     {"equipment", equipment, unobservable,
-      "equipment", "Check your equipped items."}].
+perform(Keyword, Data, Name, MPid) ->
+    case do(Keyword, Data, Name) of
+        {none, Message} ->
+            {ok, Message};
+        {ToDo, Message} ->
+            MPid ! {action, ToDo},
+            {ok, Message};
+        bargle ->
+            bargle
+    end.
+
+do("go", "", _) ->
+    {none, "Go which way?"};
+do("go", String, _) ->
+    {ok, Target} = parse(single, String),
+    {{go, Target}, none};
+
+do("say", "", _) ->
+    {{say, "..."}, none};
+do("say", String, _) ->
+    {{say, String}, none};
+
+do("status", _, _) ->
+    {{status, self}, none};
+
+do("look", "", _) ->
+    {{look, loc}, none};
+do("look", Name, Name) ->
+    {none, "Am I beautiful? Yes. Yes, I am beautiful."};
+do("look", String, _) ->
+    {ok, Target} = parse(single, String),
+    {{look, Target}, none};
+
+do("take", "", _) ->
+    {none, "Take what?"};
+do("take", Name, Name) ->
+    {none, "Not in public! What's wrong with you..."};
+do("take", String, _) ->
+    {ok, Target} = parse(multiple, String),
+    {{take, Target}, none};
+
+do("inventory", _, _) ->
+    {{inventory, self}, none};
+
+do("equipment", _, _) ->
+    {{equipment, self}, none};
+
+do(_, _, _) ->
+    bargle.
+
+help() ->
+    telcon:white("  Mob commands:\r\n") ++
+    telcon:gray( "    go Exit                - Move to a new location through Exit\r\n"
+                 "    say Text               - Say something out loud\r\n"
+                 "    status                 - Check your character's current status\r\n"
+                 "    look                   - View your surroundings\r\n"
+                 "    look Target            - Look at a target\r\n"
+                 "    take Target            - Get something from the ground\r\n"
+                 "    inventory              - Check your carried inventory\r\n"
+                 "    equipment              - Check your equipped items\r\n").
 
 alias() ->
     [{"n", "go north"},
@@ -200,6 +243,35 @@ alias() ->
      {"west", "go west"},
      {"down", "go down"},
      {"up", "go up"}].
+
+%% Binary & String handling
+parse(_, String) ->
+    {Target, _} = head(String),
+    {ok, Target}.
+
+head(Line) ->
+    Stripped = string:strip(Line),
+    case head([], Stripped) of
+        Z = {{_, _}, _} -> Z;
+        {Head, Tail}   -> {lists:reverse(Head), Tail}
+    end.
+
+head(Word, []) ->
+    {Word, []};
+head([], [$\s|T]) ->
+    head([], T);
+head(Word, [H|T]) ->
+    case H of
+        $\s ->
+            {Word, T};
+%       $. when is_number(Word) ->
+        $. ->
+            Index = list_to_integer(lists:reverse(Word)),
+            {Target, Rest} = head(T),
+            {{Index, Target}, Rest};
+        Z ->
+            head([Z|Word], T)
+    end.
 
 %% System
 note(String, Args) ->
