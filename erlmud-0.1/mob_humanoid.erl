@@ -5,31 +5,27 @@
 
 %% Interface
 observe(Magnitude, Event, State) ->
-    ConPid = mob:read(con_pid, State),
-    Name = mob:read(name, State),
-    perceive(Magnitude, Event, ConPid, Name, State).
+    Interpreted = interpret(Event, mob:read(name, State)),
+    perceive(Interpreted, Magnitude, State).
 
-perceive(Magnitude, {{Verb, Name}, Name, Outcome}, ConPid, Name, State) ->
+interpret({{Verb, {DO, Name, IO}}, Name, Outcome}, Name) ->
+    {{Verb, {DO, self, IO}}, self, Outcome};
+interpret({{Verb, {DO, TO, Name}}, Name, Outcome}, Name) ->
+    {{Verb, {DO, TO, self}}, self, Outcome};
+interpret({{Verb, {DO, Name, Name}}, Name, Outcome}, Name) ->
+    {{Verb, {DO, self, self}}, self, Outcome};
+interpret({{Verb, Name}, Name, Outcome}, Name) ->
+    {{Verb, self}, self, Outcome};
+interpret({Action, Name, Outcome}, Name) ->
+    {Action, self, Outcome};
+interpret({{Verb, Name}, Actor, Outcome}, Name) ->
+    {{Verb, self}, Actor, Outcome};
+interpret({Action, Actor, Outcome}, _) ->
+    {Action, Actor, Outcome}.
+
+perceive(Event, Magnitude, State) ->
     case detect(Magnitude, State) of
-        true  -> ConPid ! {observation, {{Verb, self}, self, Outcome}};
-        false -> ok
-    end,
-    State;
-perceive(Magnitude, {Action, Name, Outcome}, ConPid, Name, State) ->
-    case detect(Magnitude, State) of
-        true  -> ConPid ! {observation, {Action, self, Outcome}};
-        false -> ok
-    end,
-    State;
-perceive(Magnitude, {{Verb, Name}, Actor, Outcome}, ConPid, Name, State) ->
-    case detect(Magnitude, State) of
-        true  -> ConPid ! {observation, {{Verb, self}, Actor, Outcome}};
-        false -> ok
-    end,
-    State;
-perceive(Magnitude, {Action, Actor, Outcome}, ConPid, _, State) ->
-    case detect(Magnitude, State) of
-        true  -> ConPid ! {observation, {Action, Actor, Outcome}};
+        true  -> mob:read(con_pid, State) ! {observation, Event};
         false -> ok
     end,
     State.
@@ -61,14 +57,26 @@ perform(look, Target, State) ->
     State;
 perform(take, {Target, loc}, State) ->
     LocPid = mob:read(loc_pid, State),
-    take(mob:read(name, State), Target, LocPid, LocPid),
+    Holder = {LocPid, loc},
+    take({self(), mob:read(name, State)}, Target, Holder, LocPid),
     State;
 perform(take, {Target, Holder}, State) ->
-    HolderPid = inventory:find(Holder, mob:read(held_inv, State)),
-    take(mob:read(name, State), Target, HolderPid, mob:read(loc_pid, State)),
+    Inv = mob:read(held_inv, State),
+    HPid = inventory:find(Holder, Inv),
+    {_, HName, _, _}  = inventory:get_element(HPid, Inv),
+    take({self(), mob:read(name, State)}, Target, {HPid, HName}, mob:read(loc_pid, State)),
     State;
 perform(drop, Target, State) ->
-    drop(mob:read(name, State), Target, mob:read(loc_pid, State)),
+    drop({self(), mob:read(name, State)}, Target, mob:read(loc_pid, State)),
+    State;
+perform(give, {Target, Recipient}, State) ->
+    LocPid = mob:read(loc_pid, State),
+    case loc:target(LocPid, Recipient) of
+        {ok, {RPid, _, {RName, _, _, _}}} ->
+            give({self(), mob:read(name, State)}, Target, {RPid, RName}, LocPid);
+        {error, absent} ->
+            mob:read(con_pid, State) ! {system, "Give to who?"}
+    end,
     State;
 perform(inventory, self, State) ->
     mob:read(con_pid, State) ! {observation, {inventory, self, mob:read(held, State)}},
@@ -129,13 +137,15 @@ look(Target, Name, ConPid, LocPid, State) ->
             emit(LocPid, State, {look, Target}, Name, failure)
     end.
 
-take(Name, Target, HolderPid, LocPid) ->
-    Self = self(),
-    spawn_link(fun() -> hand(take, Name, Target, HolderPid, Self, LocPid) end).
+take(Self = {_, Name}, Target, Holder, LocPid) ->
+    spawn_link(fun() -> hand(take, Name, Target, Holder, Self, LocPid) end).
 
-drop(Name, Target, LocPid) ->
-    Self = self(),
-    spawn_link(fun() -> hand(drop, Name, Target, Self, LocPid, LocPid) end).
+drop(Self = {_, Name}, Target, LocPid) ->
+    Recipient = {LocPid, loc},
+    spawn_link(fun() -> hand(drop, Name, Target, Self, Recipient, LocPid) end).
+
+give(Self = {_, Name}, Target, Recipient, LocPid) ->
+    spawn_link(fun() -> hand(give, Name, Target, Self, Recipient, LocPid) end).
 
 %% Magic
 con_ext(text) -> telcon_humanoid.
@@ -160,16 +170,16 @@ depart(Target, Me, LocPid) ->
             {fail, mobman:relocate(Me)}
     end.
 
-hand(Verb, Name, Target, HolderPid, RecipientPid, LocPid) ->
+hand(Verb, Name, Target, {HPid, HName}, {RPid, RName}, LocPid) ->
     TRef = make_ref(),
-    case em_lib:call(HolderPid, transfer, {Target, TRef}) of
+    case em_lib:call(HPid, transfer, {Target, TRef}) of
         {ok, TPid} ->
             link(TPid),
-            TEntity = {_, _, {TName, _, _, _}} = em_lib:call(TPid, {move, RecipientPid}),
-            ok = em_lib:call(RecipientPid, load, TEntity),
+            TEntity = {_, _, {TName, _, _, _}} = em_lib:call(TPid, {move, RPid}),
+            ok = em_lib:call(RPid, load, TEntity),
             unlink(TPid),
-            HolderPid ! {ok, TRef},
-            LocPid ! {event, {observation, {10000, {{Verb, TName}, Name, success}}}};
+            HPid ! {ok, TRef},
+            LocPid ! {event, {observation, {10000, {{Verb, {TName, HName, RName}}, Name, success}}}};
         M = {error, _} ->
             M
     end.

@@ -24,16 +24,24 @@ observe(Event, Minion) ->
             Actor ++ " tried to go " ++ Direction ++ ", and failed.";
         {{depart, Direction}, Actor, success} ->
             Actor ++ " departs " ++ Direction;
-        {{take, ObjName}, self, success} ->
-            "You get a " ++ ObjName ++ ".";
         {{take, _}, self, failure} ->
             "You can't take that.";
-        {{take, ObjName}, Actor, success} ->
+        {{take, {ObjName, loc, self}}, self, success} ->
+            "You get a " ++ ObjName ++ ".";
+        {{take, {ObjName, loc, Actor}}, Actor, success} ->
             Actor ++ " gets a " ++ ObjName ++ ".";
-        {{drop, ObjName}, self, success} ->
+        {{take, {ObjName, Holder, Actor}}, Actor, success} ->
+            Actor ++ " gets a " ++ ObjName ++ " from a " ++ Holder ++ ".";
+        {{drop, {ObjName, self, loc}}, self, success} ->
             "You drop a " ++ ObjName ++ ".";
-        {{drop, ObjName}, Actor, success} ->
+        {{drop, {ObjName, Actor, loc}}, Actor, success} ->
             Actor ++ " drops a " ++ ObjName ++ ".";
+        {{give, {ObjName, self, Recipient}}, self, success} ->
+            "You give a " ++ ObjName ++ " to " ++ Recipient ++ ".";
+        {{give, {ObjName, Actor, Recipient}}, Actor, success} ->
+            Actor ++ " gives a " ++ ObjName ++ " to " ++ Recipient ++ ".";
+        {{give, {ObjName, Actor, self}}, Actor, success} ->
+            Actor ++ " gives a " ++ ObjName ++ " to you.";
         {{look, _}, self, failure} ->
             "That isn't here.";
         {{look, self}, Actor, success} ->
@@ -180,6 +188,15 @@ do("take", String, _) ->
         [Target, Holder] -> {{take, {Target, Holder}}, none};
         [Target]         -> {{take, {Target, loc}}, none};
         _                -> {none, "Wut?"}
+    end;
+do("give", "", _) ->
+    {none, "Give what? Hopes and dreams?"};
+do("give", Name, Name) ->
+    {none, "That's... awkward..."};
+do("give", String, _) ->
+    case parse(multiple, String) of
+        [Target, Recipient] -> {{give, {Target, Recipient}}, none};
+        _                   -> {none, "Wut?"}
     end;
 do("drop", "", _) ->
     {none, "Drop what?"};

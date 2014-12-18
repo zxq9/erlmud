@@ -18,8 +18,8 @@ arrive(LocPid, Entity) ->
 depart(LocPid, Entity, Exit) ->
     em_lib:call(LocPid, depart, {Entity, Exit}).
 
-target(LocPid, Name) ->
-    em_lib:call(LocPid, target, Name).
+target(LocPid, Target) ->
+    em_lib:call(LocPid, target, Target).
 
 load(LocPid, Entity) ->
     em_lib:call(LocPid, load, Entity).
@@ -85,8 +85,8 @@ loop(State = {ID,
         {Result, NewInventory} = departure(Entity, Exit, Inventory, LiveOut),
         From ! {Ref, Result},
         loop({ID, Info, NewInventory, Ways});
-    {From, Ref, {target, Name}} ->
-        From ! {Ref, inventory:find(Name, Inventory)},
+    {From, Ref, {target, Target}} ->
+        From ! {Ref, inventory:find_element(Target, Inventory)},
         loop(State);
     {From, Ref, {load, Entity}} ->
         NewInventory = accept(Entity, Inventory),

@@ -1,6 +1,6 @@
 -module(inventory).
 -export([new/0, from_list/1, to_list/1, add/2, append/2,
-         find/2, find/3, get_element/2, pids/1,
+         find/2, find/3, get_element/2, find_element/2, pids/1,
          drop/2, drop_pid/2, drop_target/2, drop_target/3,
          weight/1]).
 
@@ -45,6 +45,12 @@ get_element(Pid, Inv) ->
     case lists:keyfind(Pid, 1, to_list(Inv)) of
         false -> {error, absent};
         Elem  -> {ok, Elem}
+    end.
+
+find_element(Target, Inv) ->
+    case find(Target, Inv) of
+        {ok, Pid}      -> get_element(Pid, Inv);
+        E = {error, _} -> E
     end.
 
 pids(Inv) -> [Pid || {Pid, _, _} <- to_list(Inv)].
