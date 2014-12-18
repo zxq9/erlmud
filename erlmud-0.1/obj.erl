@@ -86,7 +86,7 @@ loop(State) ->
         NewState = edit(pos_pid, PosPid, State),
         From ! {Ref, em_lib:entity(NewState)},
         loop(NewState);
-    {From, Ref,{incoming, {glance, _}}} ->
+    {From, Ref,{incoming, {look, _}}} ->
         From ! {Ref, {ok, {obj, read(name, State), read(description, State)}}},
         loop(State);
     {From, Ref, {incoming, _Event}} ->
