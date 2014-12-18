@@ -12,6 +12,8 @@ interpret({{Verb, {DO, Name, IO}}, Name, Outcome}, Name) ->
     {{Verb, {DO, self, IO}}, self, Outcome};
 interpret({{Verb, {DO, TO, Name}}, Name, Outcome}, Name) ->
     {{Verb, {DO, TO, self}}, self, Outcome};
+interpret({{Verb, {DO, TO, Name}}, Actor, Outcome}, Name) ->
+    {{Verb, {DO, TO, self}}, Actor, Outcome};
 interpret({{Verb, {DO, Name, Name}}, Name, Outcome}, Name) ->
     {{Verb, {DO, self, self}}, self, Outcome};
 interpret({{Verb, Name}, Name, Outcome}, Name) ->
@@ -75,7 +77,8 @@ perform(give, {Target, Recipient}, State) ->
         {ok, {RPid, _, {RName, _, _, _}}} ->
             give({self(), mob:read(name, State)}, Target, {RPid, RName}, LocPid);
         {error, absent} ->
-            mob:read(con_pid, State) ! {system, "Give to who?"}
+            Event = {{give, {Target, self, nobody}}, self, failure},
+            mob:read(con_pid, State) ! {observation, Event}
     end,
     State;
 perform(inventory, self, State) ->
@@ -137,15 +140,15 @@ look(Target, Name, ConPid, LocPid, State) ->
             emit(LocPid, State, {look, Target}, Name, failure)
     end.
 
-take(Self = {_, Name}, Target, Holder, LocPid) ->
-    spawn_link(fun() -> hand(take, Name, Target, Holder, Self, LocPid) end).
+take(Self, Target, Holder, LocPid) ->
+    spawn_link(fun() -> hand(take, Self, Target, Holder, Self, LocPid) end).
 
-drop(Self = {_, Name}, Target, LocPid) ->
+drop(Self, Target, LocPid) ->
     Recipient = {LocPid, loc},
-    spawn_link(fun() -> hand(drop, Name, Target, Self, Recipient, LocPid) end).
+    spawn_link(fun() -> hand(drop, Self, Target, Self, Recipient, LocPid) end).
 
-give(Self = {_, Name}, Target, Recipient, LocPid) ->
-    spawn_link(fun() -> hand(give, Name, Target, Self, Recipient, LocPid) end).
+give(Self, Target, Recipient, LocPid) ->
+    spawn_link(fun() -> hand(give, Self, Target, Self, Recipient, LocPid) end).
 
 %% Magic
 con_ext(text) -> telcon_humanoid.
@@ -170,7 +173,7 @@ depart(Target, Me, LocPid) ->
             {fail, mobman:relocate(Me)}
     end.
 
-hand(Verb, Name, Target, {HPid, HName}, {RPid, RName}, LocPid) ->
+hand(Verb, {SelfPid, Name}, Target, {HPid, HName}, {RPid, RName}, LocPid) ->
     TRef = make_ref(),
     case em_lib:call(HPid, transfer, {Target, TRef}) of
         {ok, TPid} ->
@@ -179,8 +182,10 @@ hand(Verb, Name, Target, {HPid, HName}, {RPid, RName}, LocPid) ->
             ok = em_lib:call(RPid, load, TEntity),
             unlink(TPid),
             HPid ! {ok, TRef},
-            LocPid ! {event, {observation, {10000, {{Verb, {TName, HName, RName}}, Name, success}}}};
+            Event = {10000, {{Verb, {TName, HName, RName}}, Name, success}},
+            LocPid ! {event, {observation, Event}};
         M = {error, _} ->
+            SelfPid ! {observation, {10000, {{Verb, {nothing, none, none}}, self, failure}}},
             M
     end.
 

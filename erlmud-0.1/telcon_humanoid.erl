@@ -24,6 +24,8 @@ observe(Event, Minion) ->
             Actor ++ " tried to go " ++ Direction ++ ", and failed.";
         {{depart, Direction}, Actor, success} ->
             Actor ++ " departs " ++ Direction;
+        {{take, {nothing, none, none}}, self, failure} ->
+            "That isn't here.";
         {{take, _}, self, failure} ->
             "You can't take that.";
         {{take, {ObjName, loc, self}}, self, success} ->
@@ -32,16 +34,24 @@ observe(Event, Minion) ->
             Actor ++ " gets a " ++ ObjName ++ ".";
         {{take, {ObjName, Holder, Actor}}, Actor, success} ->
             Actor ++ " gets a " ++ ObjName ++ " from a " ++ Holder ++ ".";
+        {{drop, {nothing, none, none}}, self, failure} ->
+            "You aren't holding one of those.";
         {{drop, {ObjName, self, loc}}, self, success} ->
             "You drop a " ++ ObjName ++ ".";
         {{drop, {ObjName, Actor, loc}}, Actor, success} ->
             Actor ++ " drops a " ++ ObjName ++ ".";
+        {{give, {nothing, none, none}}, self, failure} ->
+            "You aren't holding one of those.";
+        {{give, {_, self, nobody}}, self, failure} ->
+            "Give to who?";
+        {{give, {nothing, self, _}}, self, failure} ->
+            "Give what?";
         {{give, {ObjName, self, Recipient}}, self, success} ->
             "You give a " ++ ObjName ++ " to " ++ Recipient ++ ".";
-        {{give, {ObjName, Actor, Recipient}}, Actor, success} ->
-            Actor ++ " gives a " ++ ObjName ++ " to " ++ Recipient ++ ".";
         {{give, {ObjName, Actor, self}}, Actor, success} ->
             Actor ++ " gives a " ++ ObjName ++ " to you.";
+        {{give, {ObjName, Actor, Recipient}}, Actor, success} ->
+            Actor ++ " gives a " ++ ObjName ++ " to " ++ Recipient ++ ".";
         {{look, _}, self, failure} ->
             "That isn't here.";
         {{look, self}, Actor, success} ->
@@ -67,15 +77,13 @@ render_location({Name, Description, Inventory, Exits},
                 {_, _, MPid, _, _}) ->
     ExitNames = string:join([N || {N, _, _, _} <- Exits], " "),
     {Mobs, Objs} = render_occupants(MPid, Inventory),
-    MobString = string:join(Mobs, "\r\n"),
-    ObjString = string:join(Objs, "\r\n"),
+    Stuff = string:join(Mobs ++ Objs, "\r\n"),
     io_lib:format(telcon:cyan("~ts\r\n") ++
                   telcon:gray("~ts\r\n[ obvious exits:") ++
                   telcon:white(" ~ts ") ++
                   telcon:gray("]\r\n") ++
-                  telcon:green("~ts\r\n") ++
                   telcon:green("~ts"),
-                  [Name, Description, ExitNames, MobString, ObjString]).
+                  [Name, Description, ExitNames, Stuff]).
 
 render_occupants(MPid, Inventory) ->
     render_occupants(MPid, Inventory, {[], []}).
@@ -193,8 +201,10 @@ do("give", "", _) ->
     {none, "Give what? Hopes and dreams?"};
 do("give", Name, Name) ->
     {none, "That's... awkward..."};
-do("give", String, _) ->
+do("give", String, Name) ->
     case parse(multiple, String) of
+        [Name, _]           -> {none, "That's... awkward..."};
+        [_, Name]           -> {none, "You're already holding it!"};
         [Target, Recipient] -> {{give, {Target, Recipient}}, none};
         _                   -> {none, "Wut?"}
     end;
