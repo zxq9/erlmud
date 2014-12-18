@@ -54,7 +54,7 @@ observe(Event, Minion) ->
 render_location({Name, Description, Inventory, Exits},
                 {_, _, MPid, _, _}) ->
     ExitNames = string:join([N || {N, _, _, _} <- Exits], " "),
-    {Mobs, Objs} = render_inventory(MPid, Inventory),
+    {Mobs, Objs} = render_occupants(MPid, Inventory),
     MobString = string:join(Mobs, "\r\n"),
     ObjString = string:join(Objs, "\r\n"),
     io_lib:format(telcon:cyan("~ts\r\n") ++
@@ -65,17 +65,17 @@ render_location({Name, Description, Inventory, Exits},
                   telcon:green("~ts"),
                   [Name, Description, ExitNames, MobString, ObjString]).
 
-render_inventory(MPid, Inventory) ->
-    render_inventory(MPid, Inventory, {[], []}).
+render_occupants(MPid, Inventory) ->
+    render_occupants(MPid, Inventory, {[], []}).
 
-render_inventory(_, [], {Mobs, Objs}) ->
+render_occupants(_, [], {Mobs, Objs}) ->
     {lists:reverse(Mobs), lists:reverse(Objs)};
-render_inventory(MPid, [{MPid, _, _} | Inv], Stuff) ->
-    render_inventory(MPid, Inv, Stuff);
-render_inventory(MPid, [{_, _, {Name, mob, _, _}} | Inv], {Mobs, Objs}) ->
-    render_inventory(MPid, Inv, {[io_lib:format("~ts is standing here.", [Name]) | Mobs], Objs});
-render_inventory(MPid, [{_, _, {Name, obj, _, _}} | Inv], {Mobs, Objs}) ->
-    render_inventory(MPid, Inv, {Mobs, [io_lib:format("~ts is here.", [Name]) | Objs]}).
+render_occupants(MPid, [{MPid, _, _} | Inv], Stuff) ->
+    render_occupants(MPid, Inv, Stuff);
+render_occupants(MPid, [{_, _, {Name, mob, _, _}} | Inv], {Mobs, Objs}) ->
+    render_occupants(MPid, Inv, {[io_lib:format("~ts is standing here.", [Name]) | Mobs], Objs});
+render_occupants(MPid, [{_, _, {Name, obj, _, _}} | Inv], {Mobs, Objs}) ->
+    render_occupants(MPid, Inv, {Mobs, [io_lib:format("~ts is here.", [Name]) | Objs]}).
 
 render_status(Mob) ->
     {Str, Int, Wil, Dex, Con, Speed} = mob:read(stats, Mob),
