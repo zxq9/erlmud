@@ -59,8 +59,13 @@ perform(look, Target, State) ->
          mob:read(loc_pid, State),
          State),
     State;
-perform(take, Target, State) ->
-    take(Target, self(), mob:read(name, State), mob:read(loc_pid, State)),
+perform(take, {Target, loc}, State) ->
+    note("perform(take, {~p, loc}, State)", [Target]),
+    take(mob:read(name, State), Target, mob:read(loc_pid, State)),
+    State;
+perform(take, {Target, Holder}, State) ->
+    HolderPid = inventory:find(Holder, mob:read(held_inv, State)),
+    take(mob:read(name, State), Target, HolderPid),
     State;
 perform(inventory, self, State) ->
     mob:read(con_pid, State) ! {observation, {inventory, self, mob:read(held, State)}},
@@ -121,8 +126,9 @@ look(Target, Name, ConPid, LocPid, State) ->
             emit(LocPid, State, {look, Target}, Name, failure)
     end.
 
-take(Target, Self, Name, LocPid) ->
-    spawn_link(fun() -> hand(Name, Target, LocPid, Self) end).
+take(Name, Target, HolderPid) ->
+    Self = self(),
+    spawn_link(fun() -> hand(Name, Target, HolderPid, Self) end).
 
 %% Magic
 con_ext(text) -> telcon_humanoid.

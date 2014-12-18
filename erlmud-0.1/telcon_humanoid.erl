@@ -39,7 +39,7 @@ observe(Event, Minion) ->
         {{look, _}, self, View} ->
             render_look(View);
         {{look, Target}, Actor, success} ->
-            Actor ++ " looks at " ++ Target;
+            Actor ++ " looks at " ++ Target ++ ".";
         {warp, self, _} ->
             "You suddenly find yourself, existing.";
         {warp, Actor, _} ->
@@ -54,25 +54,28 @@ observe(Event, Minion) ->
 render_location({Name, Description, Inventory, Exits},
                 {_, _, MPid, _, _}) ->
     ExitNames = string:join([N || {N, _, _, _} <- Exits], " "),
-    Stuff = string:join(render_inventory(MPid, Inventory), "\r\n"),
+    {Mobs, Objs} = render_inventory(MPid, Inventory),
+    MobString = string:join(Mobs, "\r\n"),
+    ObjString = string:join(Objs, "\r\n"),
     io_lib:format(telcon:cyan("~ts\r\n") ++
                   telcon:gray("~ts\r\n[ obvious exits:") ++
                   telcon:white(" ~ts ") ++
                   telcon:gray("]\r\n") ++
+                  telcon:green("~ts\r\n") ++
                   telcon:green("~ts"),
-                  [Name, Description, ExitNames, Stuff]).
+                  [Name, Description, ExitNames, MobString, ObjString]).
 
 render_inventory(MPid, Inventory) ->
-    render_inventory(MPid, Inventory, []).
+    render_inventory(MPid, Inventory, {[], []}).
 
-render_inventory(_, [], Stuff) ->
-    Stuff;
+render_inventory(_, [], {Mobs, Objs}) ->
+    {lists:reverse(Mobs), lists:reverse(Objs)};
 render_inventory(MPid, [{MPid, _, _} | Inv], Stuff) ->
     render_inventory(MPid, Inv, Stuff);
-render_inventory(MPid, [{_, _, {Name, mob, _, _}} | Inv], Stuff) ->
-    render_inventory(MPid, Inv, [io_lib:format("~ts is standing here.", [Name]) | Stuff]);
-render_inventory(MPid, [{_, _, {Name, obj, _, _}} | Inv], Stuff) ->
-    render_inventory(MPid, Inv, [io_lib:format("~ts is here.", [Name]) | Stuff]).
+render_inventory(MPid, [{_, _, {Name, mob, _, _}} | Inv], {Mobs, Objs}) ->
+    render_inventory(MPid, Inv, {[io_lib:format("~ts is standing here.", [Name]) | Mobs], Objs});
+render_inventory(MPid, [{_, _, {Name, obj, _, _}} | Inv], {Mobs, Objs}) ->
+    render_inventory(MPid, Inv, {Mobs, [io_lib:format("~ts is here.", [Name]) | Objs]}).
 
 render_status(Mob) ->
     {Str, Int, Wil, Dex, Con, Speed} = mob:read(stats, Mob),
@@ -151,39 +154,37 @@ perform(Keyword, Data, Name, MPid) ->
 do("go", "", _) ->
     {none, "Go which way?"};
 do("go", String, _) ->
-    {ok, Target} = parse(single, String),
+    Target = parse(single, String),
+    note("do(\"go\", ~p, _) -> Target = ~p", [String, Target]),
     {{go, Target}, none};
-
 do("say", "", _) ->
     {{say, "..."}, none};
 do("say", String, _) ->
     {{say, String}, none};
-
 do("status", _, _) ->
     {{status, self}, none};
-
 do("look", "", _) ->
     {{look, loc}, none};
 do("look", Name, Name) ->
     {none, "Am I beautiful? Yes. Yes, I am beautiful."};
 do("look", String, _) ->
-    {ok, Target} = parse(single, String),
+    Target = parse(single, String),
+    note("do(\"look\", ~p, _) -> Target = ~p", [String, Target]),
     {{look, Target}, none};
-
 do("take", "", _) ->
     {none, "Take what?"};
 do("take", Name, Name) ->
     {none, "Not in public! What's wrong with you..."};
 do("take", String, _) ->
-    {ok, Target} = parse(multiple, String),
-    {{take, Target}, none};
-
+    case parse(multiple, String) of
+        [Target, Holder] -> {{take, {Target, Holder}}, none};
+        [Target]         -> {{take, {Target, loc}}, none};
+        _                -> {none, "Wut?"}
+    end;
 do("inventory", _, _) ->
     {{inventory, self}, none};
-
 do("equipment", _, _) ->
     {{equipment, self}, none};
-
 do(_, _, _) ->
     bargle.
 
@@ -195,6 +196,7 @@ help() ->
                  "    look                   - View your surroundings\r\n"
                  "    look Target            - Look at a target\r\n"
                  "    take Target            - Get something from the ground\r\n"
+                 "    drop Item              - Drop Item from your carried inventory\r\n"
                  "    inventory              - Check your carried inventory\r\n"
                  "    equipment              - Check your equipped items\r\n").
 
@@ -229,32 +231,38 @@ alias() ->
      {"up", "go up"}].
 
 %% Binary & String handling
-parse(_, String) ->
-    {Target, _} = head(String),
-    {ok, Target}.
+parse(single, String) ->
+    split(hd(string:tokens(String, [$\s])));
+parse(double, String) ->
+    {Head, Tail} = head(String),
+    {split(Head), Tail};
+parse(multiple, String) ->
+    lists:map(fun split/1, string:tokens(String, [$\s])).
+
+split(Token) ->
+    case string:tokens(Token, [$.]) of
+        ["all", Name]  -> {Name, all};
+        [Prefix, Name] -> index(Prefix, Name);
+        [Name]         -> Name;
+        _              -> Token
+    end.
+
+index(Prefix, Name) ->
+    case string:to_integer(Prefix) of
+        {error, no_integer} -> Name;
+        {Index, _}          -> {Name, Index}
+    end.
 
 head(Line) ->
-    Stripped = string:strip(Line),
-    case head([], Stripped) of
-        Z = {{_, _}, _} -> Z;
-        {Head, Tail}   -> {lists:reverse(Head), Tail}
-    end.
+    {Head, Tail} = head([], string:strip(Line)),
+    {lists:reverse(Head), Tail}.
 
 head(Word, []) ->
     {Word, []};
-head([], [$\s|T]) ->
-    head([], T);
 head(Word, [H|T]) ->
     case H of
-        $\s ->
-            {Word, T};
-%       $. when is_number(Word) ->
-        $. ->
-            Index = list_to_integer(lists:reverse(Word)),
-            {Target, Rest} = head(T),
-            {{Index, Target}, Rest};
-        Z ->
-            head([Z|Word], T)
+        $\s -> {Word, T};
+        Z   -> head([Z|Word], T)
     end.
 
 %% System
