@@ -62,5 +62,5 @@ entity(State = {{Mod, _}, _}) ->
     Name = Mod:read(name, State),
     Aliases = [Name | Mod:read(aliases, State)],
     Weight = Mod:read(total_weight, State),
-    Vis= Mod:read(vis, State),
+    Vis = Mod:read(vis, State),
     {self(), Aliases, {Name, Mod, Weight, Vis}}.

@@ -158,11 +158,11 @@ hand(Name, Target, HolderPid, RecipientPid) ->
     case em_lib:call(HolderPid, transfer, {Target, TRef}) of
         {ok, TPid} ->
             link(TPid),
-            TEntity = em_lib:call(TPid, {move, RecipientPid}),
+            TEntity = {_, _, {TName, _, _, _}} = em_lib:call(TPid, {move, RecipientPid}),
             ok = em_lib:call(RecipientPid, load, TEntity),
             unlink(TPid),
             HolderPid ! {ok, TRef},
-            HolderPid ! {event, {observation, {10000, {take, Name, success}}}};
+            HolderPid ! {event, {observation, {10000, {{take, TName}, Name, success}}}};
         M = {error, _} ->
             M
     end.

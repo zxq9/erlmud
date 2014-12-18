@@ -25,11 +25,11 @@ observe(Event, Minion) ->
         {{depart, Direction}, Actor, success} ->
             Actor ++ " departs " ++ Direction;
         {{take, ObjName}, self, success} ->
-            "You get a " ++ ObjName;
-        {{take, ObjName}, self, failure} ->
-            "You can't take the " ++ ObjName ++ ".";
+            "You get a " ++ ObjName ++ ".";
+        {{take, _}, self, failure} ->
+            "You can't take that.";
         {{take, ObjName}, Actor, success} ->
-            Actor ++ " gets a " ++ ObjName;
+            Actor ++ " gets a " ++ ObjName ++ ".";
         {{look, _}, self, failure} ->
             "That isn't here.";
         {{look, self}, Actor, success} ->
