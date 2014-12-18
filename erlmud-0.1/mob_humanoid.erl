@@ -69,9 +69,10 @@ perform(equipment, self, State) ->
     mob:read(con_pid, State) ! {observation, {equipment, self, mob:read(worn, State)}},
     State.
 
-% NOTE: A few different ways 
-%       Compare with telcon_humanoid:render_look/1
 react({look, _}, State) ->
+%   Visible = [species, class, homeland, description, hp, worn, held],
+%   View = lists:foldl(fun(V, Acc) -> [{V, mob:read(V, State)} | Acc] end, [], Visible),
+%   {{ok, View}, State};
     View = {mob:read(species, State),
             mob:read(class, State),
             mob:read(homeland, State),
@@ -80,14 +81,6 @@ react({look, _}, State) ->
             mob:read(worn, State),
             mob:read(held, State)},
     {{ok, View}, State};
-
-%   Visible = [species, class, homeland, description, hp, worn, held],
-%   View = lists:foldl(fun(V, Acc) -> [{V, mob:read(V, State)} | Acc] end, [], Visible),
-%   {{ok, View}, State};
-
-%   Visible = [species, class, homeland, description, hp, worn, held],
-%   View = lists:foldl(fun(V, Acc) -> [mob:read(V, State) | Acc] end, [], Visible),
-%   {{ok, list_to_tuple(lists:reverse(View))}, State};
 react(Event, State) ->
     note("Received ~p", [Event]),
     {{ok, "You got me."}, State}.

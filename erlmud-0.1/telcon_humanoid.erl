@@ -102,8 +102,6 @@ render_inventory(InvList) ->
     "You are carrying:\r\n  " ++
     string:join(lists:reverse(lists:foldl(fun render_entity/2, [], InvList)), "\r\n  ").
 
-% NOTE: A few different ways
-%       Compare with mob_humanoid:react/2
 render_look({Species, Class, Homeland, Desc, HP, Equip, Inv}) ->
     io_lib:format("You see a ~ts ~ts from ~ts.\r\n"
                   "~ts\r\n"
@@ -111,16 +109,6 @@ render_look({Species, Class, Homeland, Desc, HP, Equip, Inv}) ->
                   "Carrying: ~tp\r\n"
                   "Appears to be ~ts",
                   [Species, Class, Homeland, Desc, Equip, Inv, health(HP)]);
-%render_look(View) when is_list(View) ->
-%   Visible = lists:reverse([species, class, homeland, description, worn, held]),
-%   Health = health(proplists:get_value(hp, View)),
-%   Viewed = lists:reverse([Health | [proplists:get_value(V, View) || V <- Visible]]),
-%   io_lib:format("You see a ~ts ~ts from ~ts.\r\n"
-%                 "~ts\r\n"
-%                 "Wearing: ~tp\r\n"
-%                 "Carrying: ~tp\r\n"
-%                 "Appears to be ~ts",
-%                 Viewed);
 render_look({obj, Name, Description}) ->
     io_lib:format("You look at the ~ts and see: ~ts", [Name, Description]).
 
