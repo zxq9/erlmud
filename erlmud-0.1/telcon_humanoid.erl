@@ -30,20 +30,16 @@ observe(Event, Minion) ->
             "You can't take the " ++ ObjName ++ ".";
         {{take, ObjName}, Actor, success} ->
             Actor ++ " gets a " ++ ObjName;
-        {{glance, self}, self, _} ->
-            "Feeling a bit vain today?";
-        {{glance, Actor}, Actor, _} ->
-            Actor ++ " dreams of greatness.";
-        {{glance, _}, self, failure} ->
+        {{look, _}, self, failure} ->
             "That isn't here.";
-        {{glance, self}, Actor, success} ->
-            Actor ++ " glances at you.";
-        {{glance, _}, self, success} ->
+        {{look, self}, Actor, success} ->
+            Actor ++ " looks at you.";
+        {{look, _}, self, success} ->
             silent;
-        {{glance, _}, self, View} ->
-            render_glance(View);
-        {{glance, Target}, Actor, success} ->
-            Actor ++ " glances at " ++ Target;
+        {{look, _}, self, View} ->
+            render_look(View);
+        {{look, Target}, Actor, success} ->
+            Actor ++ " looks at " ++ Target;
         {warp, self, _} ->
             "You suddenly find yourself, existing.";
         {warp, Actor, _} ->
@@ -108,14 +104,14 @@ render_inventory(InvList) ->
 
 % NOTE: A few different ways
 %       Compare with mob_humanoid:react/2
-render_glance({Species, Class, Homeland, Desc, HP, Equip, Inv}) ->
+render_look({Species, Class, Homeland, Desc, HP, Equip, Inv}) ->
     io_lib:format("You see a ~ts ~ts from ~ts.\r\n"
                   "~ts\r\n"
                   "Wearing: ~tp\r\n"
                   "Carrying: ~tp\r\n"
                   "Appears to be ~ts",
                   [Species, Class, Homeland, Desc, Equip, Inv, health(HP)]);
-%render_glance(View) when is_list(View) ->
+%render_look(View) when is_list(View) ->
 %   Visible = lists:reverse([species, class, homeland, description, worn, held]),
 %   Health = health(proplists:get_value(hp, View)),
 %   Viewed = lists:reverse([Health | [proplists:get_value(V, View) || V <- Visible]]),
@@ -125,7 +121,7 @@ render_glance({Species, Class, Homeland, Desc, HP, Equip, Inv}) ->
 %                 "Carrying: ~tp\r\n"
 %                 "Appears to be ~ts",
 %                 Viewed);
-render_glance({obj, Name, Description}) ->
+render_look({obj, Name, Description}) ->
     io_lib:format("You look at the ~ts and see: ~ts", [Name, Description]).
 
 render_entity({_, _, {Name, _, _, _}}) ->
