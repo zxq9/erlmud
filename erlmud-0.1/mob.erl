@@ -332,6 +332,9 @@ loop(State) ->
         NewState = accept(Entity, State),
         From ! {Ref, ok},
         loop(NewState);
+    {From, Ref, {transfer, Order}} ->
+        NewState = transfer(From, Ref, Order, State),
+        loop(NewState);
     {ConPid, divorce} ->
         divorce(State);
     Message = {'DOWN', ConRef, process, ConPid, _} ->
@@ -351,6 +354,22 @@ accept(Entity = {Pid, _, _}, State) ->
     link(Pid),
     NewState = edit(held_inv, inventory:add(Entity, read(held_inv, State)), State),
     NewState.
+
+transfer(From, Ref, {Target, TRef}, State) ->
+    Inventory = read(held_inv, State),
+    case inventory:find(Target, Inventory) of
+        M = {ok, TPid} ->
+            From ! {Ref, M},
+            receive
+                {ok, TRef} ->
+                    {ok, NewInventory} = inventory:drop_pid(TPid, Inventory),
+                    edit(held_inv, NewInventory, State)
+                after 1000 -> exit({error, stalled_transfer})
+            end;
+        M = {error, _} ->
+            From ! {Ref, M},
+            State
+    end.
 
 %% Magic
 divorce(State) ->

@@ -60,12 +60,15 @@ perform(look, Target, State) ->
          State),
     State;
 perform(take, {Target, loc}, State) ->
-    note("perform(take, {~p, loc}, State)", [Target]),
-    take(mob:read(name, State), Target, mob:read(loc_pid, State)),
+    LocPid = mob:read(loc_pid, State),
+    take(mob:read(name, State), Target, LocPid, LocPid),
     State;
 perform(take, {Target, Holder}, State) ->
     HolderPid = inventory:find(Holder, mob:read(held_inv, State)),
-    take(mob:read(name, State), Target, HolderPid),
+    take(mob:read(name, State), Target, HolderPid, mob:read(loc_pid, State)),
+    State;
+perform(drop, Target, State) ->
+    drop(mob:read(name, State), Target, mob:read(loc_pid, State)),
     State;
 perform(inventory, self, State) ->
     mob:read(con_pid, State) ! {observation, {inventory, self, mob:read(held, State)}},
@@ -126,9 +129,13 @@ look(Target, Name, ConPid, LocPid, State) ->
             emit(LocPid, State, {look, Target}, Name, failure)
     end.
 
-take(Name, Target, HolderPid) ->
+take(Name, Target, HolderPid, LocPid) ->
     Self = self(),
-    spawn_link(fun() -> hand(Name, Target, HolderPid, Self) end).
+    spawn_link(fun() -> hand(take, Name, Target, HolderPid, Self, LocPid) end).
+
+drop(Name, Target, LocPid) ->
+    Self = self(),
+    spawn_link(fun() -> hand(drop, Name, Target, Self, LocPid, LocPid) end).
 
 %% Magic
 con_ext(text) -> telcon_humanoid.
@@ -153,7 +160,7 @@ depart(Target, Me, LocPid) ->
             {fail, mobman:relocate(Me)}
     end.
 
-hand(Name, Target, HolderPid, RecipientPid) ->
+hand(Verb, Name, Target, HolderPid, RecipientPid, LocPid) ->
     TRef = make_ref(),
     case em_lib:call(HolderPid, transfer, {Target, TRef}) of
         {ok, TPid} ->
@@ -162,7 +169,7 @@ hand(Name, Target, HolderPid, RecipientPid) ->
             ok = em_lib:call(RecipientPid, load, TEntity),
             unlink(TPid),
             HolderPid ! {ok, TRef},
-            HolderPid ! {event, {observation, {10000, {{take, TName}, Name, success}}}};
+            LocPid ! {event, {observation, {10000, {{Verb, TName}, Name, success}}}};
         M = {error, _} ->
             M
     end.

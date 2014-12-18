@@ -163,7 +163,7 @@ remove(Entity = {Pid, _, _}, Inventory) ->
 
 transfer(From, Ref, {Target, TRef}, Inventory) ->
     case inventory:find(Target, Inventory) of
-        M = {ok, TPid}    ->
+        M = {ok, TPid} ->
             From ! {Ref, M},
             receive
                 {ok, TRef} ->

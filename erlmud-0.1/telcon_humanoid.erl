@@ -30,6 +30,10 @@ observe(Event, Minion) ->
             "You can't take that.";
         {{take, ObjName}, Actor, success} ->
             Actor ++ " gets a " ++ ObjName ++ ".";
+        {{drop, ObjName}, self, success} ->
+            "You drop a " ++ ObjName ++ ".";
+        {{drop, ObjName}, Actor, success} ->
+            Actor ++ " drops a " ++ ObjName ++ ".";
         {{look, _}, self, failure} ->
             "That isn't here.";
         {{look, self}, Actor, success} ->
@@ -154,9 +158,7 @@ perform(Keyword, Data, Name, MPid) ->
 do("go", "", _) ->
     {none, "Go which way?"};
 do("go", String, _) ->
-    Target = parse(single, String),
-    note("do(\"go\", ~p, _) -> Target = ~p", [String, Target]),
-    {{go, Target}, none};
+    {{go, parse(single, String)}, none};
 do("say", "", _) ->
     {{say, "..."}, none};
 do("say", String, _) ->
@@ -168,9 +170,7 @@ do("look", "", _) ->
 do("look", Name, Name) ->
     {none, "Am I beautiful? Yes. Yes, I am beautiful."};
 do("look", String, _) ->
-    Target = parse(single, String),
-    note("do(\"look\", ~p, _) -> Target = ~p", [String, Target]),
-    {{look, Target}, none};
+    {{look, parse(single, String)}, none};
 do("take", "", _) ->
     {none, "Take what?"};
 do("take", Name, Name) ->
@@ -181,6 +181,12 @@ do("take", String, _) ->
         [Target]         -> {{take, {Target, loc}}, none};
         _                -> {none, "Wut?"}
     end;
+do("drop", "", _) ->
+    {none, "Drop what?"};
+do("drop", Name, Name) ->
+    {none, "Don't be so down on yourself."};
+do("drop", String, _) ->
+    {{drop, parse(single, String)}, none};
 do("inventory", _, _) ->
     {{inventory, self}, none};
 do("equipment", _, _) ->
