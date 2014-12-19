@@ -1,23 +1,25 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!DOCTYPE html>
 <html>
 <head>
-  <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+  <meta charset="UTF-8">
   <meta name="author" content="Craig Everett">
-  <meta name="copyright" content="&copy;2014 Craig Everett">
+  <meta name="dcterms.rightsHolder" content="Craig Everett">
+  <meta name="dcterms.rights" content="Copyright 2014 Craig Everett, all rights reserved">
+  <meta name="dcterms.dateCopyrighted" content="2014">
   <link rel="stylesheet" type="text/css" href="erlmud_s.css" />
   <title>ErlMUD Commentary: Architecture - System Scaffolding | zxq9.com</title>
 </head>
 <body>
-  <div id="header">
+  <header>
     <div id="title">
       <h1>ErlMUD Commentary</h1>
     </div>
-    <div id="menu">
+    <nav>
       <a href="index.html" title="Table of Contents">Home</a>
       <a href="https://github.com/zxq9/erlmud" title="Source on GitHub">Source</a>
       <a href="http://zxq9.com" title="zxq9's Home">zxq9</a>
-    </div>
-  </div>
+    </nav>
+  </header>
   <div id="body">
     <h1 id="scaffolding">It's all scaffolding</h1>
     <p>The game we want to write is one thing, but just defining the game isn't enough. It must be written, debugged, checked for impossible situations (especially type mismatches), tested, built, distributed, executed, initialized by the host, given necessary resources, contacted by users, and about a hundred other things. None of those things are the game, though. The details of how we do those things are incidental to the fact we are writing a game in Erlang and we hope to be able to maintain it through an upgrade lifecycle (this isn't an exercise in abandonware!).</p>
@@ -99,10 +101,13 @@
     <p>It might seem strange to leave unaddressed the question of whether hordes of processes (potentially tens or even hundreds of thousands) sitting around in memory incessantly messaging each other will be a problem later on or not. With Erlang I've found it best to blithely assume that the "everything is a process" concept will work out fine (unless there is some really obvious reason it won't), and that tittering over performance concerns before any hard data is available is a waste of time. Actually, its worse than that: it invites all sorts of ridiculous structural "optimization" ideas at the proto-architecture stage of design (the part where you're musing out the window, thinking, without having done so much as type <code>git init</code>). Our system lacks both its first user and, well, a system. Consider how silly it is to start postulating system loads in this situation!</p>
     <P>Early assumptions made before any code has been written tend to doom the resulting project with a cancerous affliction of radically un-idiomatic counter-Erlang antipatterns. It is relatively easy to switch message routes around and replace the representation of components within a complex system so long as the code uses functional abstraction properly and embraces the per-process partition of state. It is usually not as easy to move the execution point of large chunks of interdependent logic from a single monolithic process to a pool of workers, though. We'd almost never admit this out loud, but part of the difficulty is overcoming our emotional investment in a tricky part of code that we found a clever solution to (your ego motivates you to work, but it also damns you to dine alone with dusty old clever skeletons). Until we can generate some hard performance numbers we have to trust that Erlang's concept of per-process encapsulation and strict message passing will work in our favor and go with the flow.</p>
   </div>
-  <div id="footer">
-    <div id="nav"><a href="001-002_architecture.html">&lt; Previous</a></div>
-    <div id="nav"><a href="index.html">Home</a></div>
-    <div id="nav"><a href="002-001_raw_erlang.html">Next &gt;</a></div>
-  </div>
+  <footer>
+    <nav>
+      <a href="001-002_architecture.html">&lt; Previous</a>
+      <a href="index.html">Home</a>
+      <a href="002-001_raw_erlang.html">Next &gt;</a>
+    </nav>
+    <p><small>&copy; 2014 Craig Everett</small></p>
+  </footer>
 </body>
 </html>

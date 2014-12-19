@@ -1,23 +1,25 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!DOCTYPE html>
 <html>
 <head>
-  <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+  <meta charset="UTF-8">
   <meta name="author" content="Craig Everett">
-  <meta name="copyright" content="&copy;2014 Craig Everett">
+  <meta name="dcterms.rightsHolder" content="Craig Everett">
+  <meta name="dcterms.rights" content="Copyright 2014 Craig Everett, all rights reserved">
+  <meta name="dcterms.dateCopyrighted" content="2014">
   <link rel="stylesheet" type="text/css" href="erlmud_s.css" />
   <title>ErlMUD Commentary: Architecture - The Game | zxq9.com</title>
 </head>
 <body>
-  <div id="header">
+  <header>
     <div id="title">
       <h1>ErlMUD Commentary</h1>
     </div>
-    <div id="menu">
+    <nav>
       <a href="index.html" title="Table of Contents">Home</a>
       <a href="https://github.com/zxq9/erlmud" title="Source on GitHub">Source</a>
       <a href="http://zxq9.com" title="zxq9's Home">zxq9</a>
-    </div>
-  </div>
+    </nav>
+  </header>
   <div id="body">
     <h1 id="decomposition">Decomposition</h1>
     <p>Now that we have identified the role each element of the game serves we can think more clearly about how to implement them. Our goal is to avoid putting too much responsibility (really, too much complex behavior) into a single part of the system. The last thing we want to do is accidentally mix platform and gameplay concerns or sprinkle bits of data or rule systems into our game elements or simulation mechanics.</p>
@@ -126,10 +128,13 @@
     <p>None of this is set in stone. One of the wonderful things about Erlang's functional nature and strict message passing is the ease of hacking around until a system feels right. This means while we will begin writing a system that looks like the one described above, we might discover that it doesn't feel right as we go along or that some part of it is inviting unwarranted complexity into the model (attentive readers may have already spotted one glaring point of redundancy...).</p>
     <p>Writing concurrent systems that share data is a lot like carving something in stone or cutting a diamond in that changing a part of the system can require a huge amount of work to make sure that the change fits within the surrounding system. Systems that adhere to the actor model, on the other hand, are more like working with wet clay. So don't fixate on any particular part of the system and be bold in your own experiments (that's what git branches are for!).</p>
   </div>
-  <div id="footer">
-    <div id="nav"><a href="001-001_architecture.html">&lt; Previous</a></div>
-    <div id="nav"><a href="index.html">Home</a></div>
-    <div id="nav"><a href="001-003_architecture.html">Next &gt;</a></div>
-  </div>
+  <footer>
+    <nav>
+      <a href="001-001_architecture.html">&lt; Previous</a>
+      <a href="index.html">Home</a>
+      <a href="001-003_architecture.html">Next &gt;</a>
+    </nav>
+    <p><small>&copy; 2014 Craig Everett</small></p>
+  </footer>
 </body>
 </html>

@@ -1,23 +1,25 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!DOCTYPE html>
 <html>
 <head>
-  <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+  <meta charset="UTF-8">
   <meta name="author" content="Craig Everett">
-  <meta name="copyright" content="&copy;2014 Craig Everett">
+  <meta name="dcterms.rightsHolder" content="Craig Everett">
+  <meta name="dcterms.rights" content="Copyright 2014 Craig Everett, all rights reserved">
+  <meta name="dcterms.dateCopyrighted" content="2014">
   <link rel="stylesheet" type="text/css" href="erlmud_s.css" />
   <title>ErlMUD Commentary: Architecture - The Big Picture | zxq9.com</title>
 </head>
 <body>
-  <div id="header">
+  <header>
     <div id="title">
       <h1>ErlMUD Commentary</h1>
     </div>
-    <div id="menu">
+    <nav>
       <a href="index.html" title="Table of Contents">Home</a>
       <a href="https://github.com/zxq9/erlmud" title="Source on GitHub">Source</a>
       <a href="http://zxq9.com" title="zxq9's Home">zxq9</a>
-    </div>
-  </div>
+    </nav>
+  </header>
   <div id="body">
     <h1 id="concept">Concept</h1>
     <p>ErlMUD is a simple Multi-User Dungeon written in Erlang. It is written in a way that takes advantage of Erlang's concurrent, strict message-passing model and the features provided by the Erlang runtime.</p>
@@ -76,54 +78,63 @@
     <h1 id="distillation">Distilling Elements</h1>
     <p>From the discussion above, and from taking some time out to play a MUD or two (seriously, try one), we can see that the top levels of the problem "write a MUD" are:</p>
     <ul>
-      <li>platform</li>
-      <ul>
-        <li>locations</li>
-        <li>location-location message protocol</li>
-        <li>location-entity message protocol</li>
-      </ul>
-      <li>gameplay</li>
-      <ul>
-        <li>entities</li>
+      <li>platform
         <ul>
-          <li>objects</li>
-          <li>mobs</li>
+          <li>locations</li>
+          <li>location-location message protocol</li>
+          <li>location-entity message protocol</li>
         </ul>
-        <li>interaction</li>
+      </li>
+      <li>gameplay
         <ul>
-          <li>procedures</li>
-          <li>rules</li>
+          <li>entities
+            <ul>
+              <li>objects</li>
+              <li>mobs</li>
+            </ul>
+          </li>
+          <li>interaction
+            <ul>
+              <li>procedures</li>
+              <li>rules</li>
+            </ul>
+          </li>
+          <li>peripheral systems
+            <ul>
+              <li>scoring</li>
+              <li>ranking</li>
+              <li>competition/ladder</li>
+              <li>minigames</li>
+              <li>alternate play modes</li>
+            </ul>
+          </li>
         </ul>
-        <li>peripheral systems</li>
+      </li>
+      <li>data
         <ul>
-          <li>scoring</li>
-          <li>ranking</li>
-          <li>competition/ladder</li>
-          <li>minigames</li>
-          <li>alternate play modes</li>
+          <li>base
+            <ul>
+              <li>maps</li>
+              <li>entity</li>
+              <li>spawn/load</li>
+              <li>balance</li>
+              <li>tools
+                <ul>
+                  <li>data generators</li>
+                  <li>data editors</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li>instance
+            <ul>
+              <li>entity condition</li>
+              <li>entity location</li>
+              <li>accounts</li>
+            </ul>
+          </li>
         </ul>
-      </ul>
-      <li>data</li>
-      <ul>
-        <li>base</li>
-        <ul>
-          <li>maps</li>
-          <li>entity</li>
-          <li>spawn/load</li>
-          <li>balance</li>
-          <li>tools</li>
-          <ul>
-            <li>data generators</li>
-            <li>data editors</li>
-          </ul>
-        </ul>
-        <li>instance</li>
-        <ul>
-          <li>entity condition</li>
-          <li>entity location</li>
-          <li>accounts</li>
-        </ul>
-      </ul>
+      </li>
     </ul>
     <p>We've discussed the game system, but not the scaffolding necessary to spin things up. We'll go into more detail about this in chapter three, but for now some obviously necessary system elements are:</p>
     <ul>
@@ -134,10 +145,13 @@
     </ul>
     <p>So far, this is what we can see. Next we will take a closer look at the game elements and think through what supporting elements we might need to implement.</p>
   </div>
-  <div id="footer">
-    <div id="nav"><a href="000-001_introduction.html">&lt; Previous</a></div>
-    <div id="nav"><a href="index.html">Home</a></div>
-    <div id="nav"><a href="001-002_architecture.html">Next &gt;</a></div>
-  </div>
+  <footer>
+    <nav>
+      <a href="000-001_introduction.html">&lt; Previous</a>
+      <a href="index.html">Home</a>
+      <a href="001-002_architecture.html">Next &gt;</a>
+    </nav>
+    <p><small>&copy; 2014 Craig Everett</small></p>
+  </footer>
 </body>
 </html>

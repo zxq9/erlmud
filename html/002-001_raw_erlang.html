@@ -1,23 +1,25 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!DOCTYPE html>
 <html>
 <head>
-  <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+  <meta charset="UTF-8">
   <meta name="author" content="Craig Everett">
-  <meta name="copyright" content="&copy;2014 Craig Everett">
+  <meta name="dcterms.rightsHolder" content="Craig Everett">
+  <meta name="dcterms.rights" content="Copyright 2014 Craig Everett, all rights reserved">
+  <meta name="dcterms.dateCopyrighted" content="2014">
   <link rel="stylesheet" type="text/css" href="erlmud_s.css" />
   <title>ErlMUD Commentary: Raw Erlang - Forming a Skeleton | zxq9.com</title>
 </head>
 <body>
-  <div id="header">
+  <header>
     <div id="title">
       <h1>ErlMUD Commentary</h1>
     </div>
-    <div id="menu">
+    <nav>
       <a href="index.html" title="Table of Contents">Home</a>
       <a href="https://github.com/zxq9/erlmud" title="Source on GitHub">Source</a>
       <a href="http://zxq9.com" title="zxq9's Home">zxq9</a>
-    </div>
-  </div>
+    </nav>
+  </header>
   <div id="body">
     <h1>2014-11-04: Author's Note</h1>
     <p>For the benefit of the two other people who might accidentally see this...</p>
@@ -174,10 +176,13 @@ Connection closed.
     <p>I usually find it useful to begin modeling a system as if everything were a process, and not really worrying much about data structures until I have a reason to. If we abstract our data and communication methods properly, changing things like that in the background are typically not too much trouble. A surprising amount of the time any nagging performance worries we might have about having "too many" processes turn out to have been unfounded, or even contrary to high performance in a massively parallel environment. With more processes it is easier to scale "out" and not "up". This is an early part of removing bottlenecks by never creating any.</p>
 -->
   </div>
-  <div id="footer">
-    <div id="nav"><a href="001-003_architecture.html">&lt; Previous</a></div>
-    <div id="nav"><a href="index.html">Home</a></div>
-    <div id="nav"><a href="002-001_raw_erlang.html">Next &gt;</a></div>
-  </div>
+  <footer>
+    <nav>
+      <a href="001-003_architecture.html">&lt; Previous</a>
+      <a href="index.html">Home</a>
+      <a href="002-001_raw_erlang.html">Next &gt;</a>
+    </nav>
+    <p><small>&copy; 2014 Craig Everett</small></p>
+  </footer>
 </body>
 </html>
