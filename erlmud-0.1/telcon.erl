@@ -481,7 +481,7 @@ sys_help() ->
           "\r\n") ++
     white("  Alias commands:\r\n") ++
     gray( "    list OR (nothing)      - List current command aliases\r\n"
-          "    Alias Text             - Set Alias to Text\r\n"
+          "    Alias Text             - Set Alias to Text: 'alias gt get torch'\r\n"
           "    clear                  - Clear all aliases\r\n"
           "    clear Alias            - Clear Alias\r\n"
           "    default                - Reset aliases to default\r\n"
