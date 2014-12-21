@@ -1,23 +1,25 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!DOCTYPE html>
 <html>
 <head>
-  <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+  <meta charset="UTF-8">
   <meta name="author" content="Craig Everett">
-  <meta name="copyright" content="&copy;2014 Craig Everett">
+  <meta name="dcterms.rightsHolder" content="Craig Everett">
+  <meta name="dcterms.rights" content="Copyright 2014 Craig Everett, all rights reserved">
+  <meta name="dcterms.dateCopyrighted" content="2014">
   <link rel="stylesheet" type="text/css" href="erlmud_s.css" />
   <title>ErlMUD Commentary: Introduction | zxq9.com</title>
 </head>
 <body>
-  <div id="header">
+  <header>
     <div id="title">
       <h1>ErlMUD Commentary</h1>
     </div>
-    <div id="menu">
+    <nav>
       <a href="index.html" title="Table of Contents">Home</a>
       <a href="https://github.com/zxq9/erlmud" title="Source on GitHub">Source</a>
       <a href="http://zxq9.com" title="zxq9's Home">zxq9</a>
-    </div>
-  </div>
+    </nav>
+  </header>
   <div id="body">
     <h1>Introduction</h1>
     <p>ErlMUD is a game system written in Erlang. My purpose in writing it and this commentary is to demonstrate how a simple Erlang project evolves to become a production-style OTP system. (Playing games on it is fun, too!)</p>
@@ -27,10 +29,13 @@
     <p>No claim is made here that ErlMUD embodies the one true way to design or structure a production system. I'm not even claiming that ErlMUD reflects a good way to do this. What is presented is merely a way and hopefully the circuitous path we take to our destination will place enough facets of the production design problem in view of readers that they can come up with their own solutions when they encounter similar situations.</p>
     <p>Reading code can be hard. Understanding interactions within a software system can be hard, especially a concurrent one. I think the best way to approach learning a new environment is to stick with the same project concept the whole way through so the reader isn't spending more time understanding how the project works than the environment. To relieve the reader of the burden of understanding new project mechanics every chapter I've decided to make the entire demonstration center around just ErlMUD so the game system can be described just once, and then focus on how the imlpementation of it evolves over time.</p>
   </div>
-  <div id="footer">
-    <div id="nav"><a href="index.html">&lt; Previous</a></div>
-    <div id="nav"><a href="index.html">Home</a></div>
-    <div id="nav"><a href="001-001_architecture.html">Next &gt;</a></div>
-  </div>
+  <footer>
+    <nav>
+      <a href="index.html">&lt; Previous</a>
+      <a href="index.html">Home</a>
+      <a href="001-001_architecture.html">Next &gt;</a>
+    </nav>
+    <p><small>&copy; 2014 Craig Everett</small></p>
+  </footer>
 </body>
 </html>

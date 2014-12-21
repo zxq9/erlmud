@@ -230,6 +230,7 @@ help() ->
                  "    look Target            - Look at a target\r\n"
                  "    take Target            - Get something from the ground\r\n"
                  "    drop Item              - Drop Item from your carried inventory\r\n"
+                 "    give Item Someone      - Give the Item to the mob you name\r\n"
                  "    inventory              - Check your carried inventory\r\n"
                  "    equipment              - Check your equipped items\r\n").
 

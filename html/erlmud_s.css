@@ -68,7 +68,7 @@ ol {
   list-style-type: decimal;
 }
 
-#header {
+header {
   height: 5em;
 }
 #title {
@@ -80,7 +80,7 @@ ol {
   font-size: 3em;
   margin-top: 15px;
 }
-#menu {
+header nav {
   float: right;
   margin-right: 20%;
   margin-top: 1em;
@@ -90,26 +90,30 @@ ol {
   top: 15px;
   right: 15%;
 }
-#menu a {
+header nav a {
   text-decoration: none;
   color: #777;
 }
-#menu a:hover {
+header nav a:hover {
   color: #aaa;
   text-decoration: underline;
 }
-#footer {
+footer {
   margin: 0 auto;
   padding-top: 1em;
   max-width: 800px;
   height: 5em;
 }
-#nav {
+footer nav a {
   float: left;
   display: block;
   margin: 0 auto;
   width: 33%;
   text-align: center;
+}
+footer p {
+  text-align: center;
+  margin: 3em;
 }
 
 #toc {
