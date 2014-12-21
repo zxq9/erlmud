@@ -204,36 +204,60 @@ footer small {
   color: #aaa;
   text-decoration: underline;
 }
-#body code {
-  font-size: 0.9em;
-  font-family: "liberation mono", monospace;
-  color: #340;
-  background: #edf;
-}
+
 #body .source {
   margin-top: 1em;
   padding: 1em;
   border-radius: 1em;
   font-size: 0.9em;
   font-family: "liberation mono", monospace;
-  color: #000;
-  background: #eef;
+  color: #dcdcdc;
+  background: #111;
 }
 #body .source a {
-  color: #800;
+  color: #eee;
 }
 #body .source a:hover {
-  color: #808;
+  color: #e0e;
   text-decoration: underline;
 }
 #body .source pre {
-  border-top: #340 1px solid;
+  border-top: #eee 1px solid;
   margin-top: 1em;
   padding-top: 1em;
   font-size: 0.9em;
   font-family: "liberation mono", monospace;
   overflow: auto;
 }
+
+span[token=tag] {
+  color: #fe0;
+  font-weight: bold;
+}
+span[token=op] {
+  color: #fe0;
+}
+span[token=literal] {
+  color: #f0f;
+  font-weight: bold;
+}
+span[token=sub] {
+  color: #e24;
+  font-weight: bold;
+}
+span[token=bracket] {
+  color: #e24;
+  font-weight: bold;
+}
+span[token=bif] {
+  color: #0ff;
+  font-weight: bold;
+}
+span[token=symbol] {
+  color: #0ff;
+  font-weight: bold;
+}
+
 #body .terminal {
   margin-top: 1em;
   padding: 1em;

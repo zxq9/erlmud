@@ -21,6 +21,8 @@
     </nav>
   </header>
   <div id="body">
+    <h1>A Deep Breath Before the Plunge</h1>
+    <p>This section tells the story of how the v0.1 "raw" Erlang 
     <h1>2014-11-04: Author's Note</h1>
     <p>For the benefit of the two other people who might accidentally see this...</p>
     <p>Baby steps, or a few leaps?</p>
@@ -31,25 +33,25 @@
     <div class="source">
     <a href="https://github.com/zxq9/erlmud/blob/d61149ca4c5773d0223a9e70d0061db3b804f19b/erlmud-0.1/erlmud.erl">erlmud-0.1/erlmud.erl</a>
 <pre>
- 1  -module(erlmud).
- 2  -export([start/0]).
+ 1  <span token="tag">-module</span>(<span token="literal">erlmud</span>).
+ 2  <span token="tag">-export</span>(<span token="bracket">[</span>start/<span token="literal">0</span><span token="bracket">]</span>).
  3
- 4  start() -&gt;
- 5      register(erlmud, spawn(fun() -&gt; init() end)).
+ 4  start() <span token="op">-&gt;</span>
+ 5      <span token="bif">register</span>(<span token="literal">erlmud</span>, <span token="bif">spawn</span>(<span token="tag">fun</span>() <span token="op">-&gt;</span> init() <span token="tag">end</span>)).
  6
- 7  init() -&gt;
- 8      io:format("~p erlmud: Starting up.", [self()]),
+ 7  init() <span token="op">-&gt;</span>
+ 8      io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> erlmud: Starting up."</span>, <span token="bracket">[</span><span token="bif">self</span>()<span token="bracket">]</span>),
  9      loop().
 10
-11  loop() -&gt;
-12    receive
-13      shutdown -&gt;
-14          io:format("~p erlmud: Shutting down.~n", [self()]),
-15          exit(shutdown);
-16      Any -&gt;
-17          io:format("~p erlmud: Received~n~n~tp~n~n", [self(), Any]),
+11  loop() <span token="op">-&gt;</span>
+12    <span token="tag">receive</span>
+13      shutdown <span token="op">-&gt;</span>
+14          io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> erlmud: Shutting down.</span><span token="sub">~n</span><span token="literal">"</span>, <span token="bracket">[</span><span token="bif">self</span>()<span token="bracket">]</span>),
+15          <span token="bif">exit</span>(shutdown);
+16      <span token="symbol">Any</span> <span token="op">-&gt;</span>
+17          io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> erlmud: Received</span><span token="sub">~n~n~tp~n~n</span><span token="literal">"</span>, <span token="bracket">[</span><span token="bif">self</span>(), <span token="symbol">Any</span><span token="bracket">]</span>),
 18          loop()
-19    end.
+19    <span token="tag">end</span>.
 </pre>
     </div>
     <p>And playing with that in the shell...</p>
@@ -82,44 +84,44 @@ shutdown
     <div class="source">
     <a href="https://github.com/zxq9/erlmud/blob/c6dcc2f28fa00e46166e9ee7c2925b59ecf1bd5b/erlmud-0.1/telnet.erl">telnet.erl</a>
 <pre>
- 1  -module(telnet).
- 2  -export([start/0, start/1]).
+ 1  <span token="tag">-module</span>(<span token="literal">telnet</span>).
+ 2  <span token="tag">-export</span>(<span token="bracket">[</span>start/<span token="literal">0</span>, start/<span token="literal">1</span><span token="bracket">]</span>).
  3
- 4  start() -&gt; start(23).
+ 4  start() <span token="op">-&gt;</span> start(<span token="literal">23</span>).
  5
- 6  start(Port) -&gt;
- 7      register(telnet, spawn(fun() -&gt; init(Port) end)).
+ 6  start(<span token="symbol">Port</span>) <span token="op">-&gt;</span>
+ 7      <span token="bif">register</span>(<span token="literal">telnet</span>, <span token="bif">spawn</span>(<span token="tag">fun</span>() <span token="op">-&gt;</span> init(<span token="symbol">Port</span>) <span token="tag">end</span>)).
  8
- 9  init(Port) -&gt;
-10      {ok, Listen} = gen_tcp:listen(Port, [binary, {active, true}]),
-11      {ok, Socket} = gen_tcp:accept(Listen),
-12      gen_tcp:close(Listen),
-13      io:format("~p telnet: Starting up on port ~p.~n", [self(), Port]),
-14      loop(Socket).
+ 9  init(<span token="symbol">Port</span>) <span token="op">-&gt;</span>
+10      <span token="bracket">{</span><span token="literal">ok</span>, <span token="symbol">Listen</span><span token="bracket">}</span> <span token="op">=</span> gen_tcp:listen(<span token="symbol">Port</span>, <span token="bracket">[</span><span token="literal">binary</span>, <span token="bracket">{</span><span token="literal">active</span>, <span token="literal">true</span><span token="bracket">}]</span>),
+11      <span token="bracket">{</span><span token="literal">ok</span>, <span token="symbol">Socket</span><span token="bracket">}</span> <span token="op">=</span> gen_tcp:accept(<span token="symbol">Listen</span>),
+12      gen_tcp:close(<span token="symbol">Listen</span>),
+13      io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> telnet: Starting up on port </span><span token="sub">~p</span><span token="literal">.</span><span token="sub">~n</span><span token="literal">"</span>, <span token="bracket">[</span><span token="bif">self</span>(), <span token="symbol">Port</span><span token="bracket">]</span>),
+14      loop(<span token="symbol">Socket</span>).
 15
-16  loop(Socket) -&gt;
-17    receive
-18      {tcp, Socket, Bin} -&gt;
-19          io:format("~p telnet: Received ~tp~n", [self(), Bin]),
-20          Str = binary_to_list(Bin),
-21          io:format("~p telnet: Unpacked ~tp~n", [self(), Str]),
-22          Reply = "You: " ++ Str,
-23          gen_tcp:send(Socket, Reply),
-24          loop(Socket);
-25      {send, Message} -&gt;
-26          M = "#system: " ++ Message ++ "\r\n",
-27          gen_tcp:send(Socket, M),
-28          loop(Socket);
-29      {tcp_closed, Socket} -&gt;
-30          io:format("~p telnet: Socket closed. Retiring.~n", [self()]),
-31          exit(tcp_closed);
-32      shutdown -&gt;
-33          io:format("~p telnet: Shutting down hard.~n", [self()]),
-34          exit(shutdown);
-35      Any -&gt;
-36          io:format("~p telnet: Received ~tp~n", [self(), Any]),
-37          loop(Socket)
-38    end.
+16  loop(<span token="symbol">Socket</span>) <span token="op">-&gt;</span>
+17    <span token="tag">receive</span>
+18      <span token="bracket">{</span><span token="literal">tcp</span>, <span token="symbol">Socket</span>, <span token="symbol">Bin</span><span token="bracket">}</span> <span token="op">-&gt;</span>
+19          io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> telnet: Received </span><span token="sub">~tp~n</span><span token="literal">"</span>, [<span token="bif">self</span>(), <span token="symbol">Bin</span><span token="bracket">]</span>),
+20          <span token="symbol">Str</span> <span token="op">=</span> <span token="bif">binary_to_list</span>(<span token="symbol">Bin</span>),
+21          io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> telnet: Unpacked </span><span token="sub">~tp~n</span><span token="literal">"</span>, <span token="bracket">[</span><span token="bif">self</span>(), <span token="symbol">Str</span><span token="bracket">]</span>),
+22          <span toekn="symbol">Reply</span> <span token="op">=</span> <span token="literal">"You: "</span> <span token="op">++</span> <span token="symbol">Str</span>,
+23          gen_tcp:send(<span token="symbol">Socket</span>, <span token="symbol">Reply</span>),
+24          loop(<span token="symbol">Socket</span>);
+25      <span token="bracket">{</span><span token="literal">send</span>, <span token="symbol">Message</span><span token="bracket">}</span> <span token="op">-&gt;</span>
+26          <span token="symbol">M</span> <span token="op">=</span> <span token="literal">"#system: "</span> <span token="op">++</span> <span token="symbol">Message</span> <span token="op">++</span> <span token="literal">"\r\n"</span>,
+27          gen_tcp:send(<span token="symbol">Socket</span>, <span token="symbol">M</span>),
+28          loop(<span token="symbol">Socket</span>);
+29      <span token="bracket">{</span><span token="literal">tcp_closed</span>, <span token="symbol">Socket</span><span token="bracket">}</span> <span token="op">-&gt;</span>
+30          io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> telnet: Socket closed. Retiring.</span><span token="sub">~n</span><span token="literal">"</span>, <span token="bracket">[</span><span token="bif">self</span>()<span token="bracket">]</span>),
+31          <span token="bif">exit</span>(<span token="literal">tcp_closed</span>);
+32      <span token="literal">shutdown</span> <span token="op">-&gt;</span>
+33          io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> telnet: Shutting down hard.</span><span token="sub">~n</span><span token="literal">"</span>, <span token="bracket">[</span><span token="bif">self</span>()<span token="bracket">]</span>),
+34          <span token="bif">exit</span>(<span token="literal">shutdown</span>);
+35      <span token="variable">Any</span> <span token="op">-&gt;</span>
+36          io:format(<span token="literal">"</span><span token="sub">~p</span><span token="literal"> telnet: Received </span><span token="sub">~tp~n</span><span token="literal">"</span>, <span token="bracket">[</span><span token="bif">self</span>(), <span token="symbol">Any</span><span token="bracket">]</span>),
+37          loop(<span token="symbol">Socket</span>)
+38    <span token="tag">end</span>.
 </pre>
     </div>
     <p>And... hey, it works!</p>
