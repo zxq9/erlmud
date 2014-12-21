@@ -271,7 +271,7 @@ span[token=symbol] {
   font-family: "liberation mono", monospace;
   overflow: auto;
 }
-#body .footnote {
+aside {
   font-size: 0.8em;
   border-radius: 1em;
   border: #669 1px solid;
