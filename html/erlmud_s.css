@@ -107,13 +107,17 @@ footer {
 footer nav a {
   float: left;
   display: block;
-  margin: 0 auto;
+  margin: 1em auto;
   width: 33%;
   text-align: center;
 }
 footer p {
   text-align: center;
-  margin: 3em;
+  margin: 1em;
+}
+
+footer small {
+  font-size: 0.7em;
 }
 
 #toc {
