@@ -12,7 +12,6 @@ The stages of change are arbitrarily designated:
 * Pure Erlang
 * Psychobitch
 * OTP Release
-* Improved OTP
 * Cyclic maintenance
 
 The above definitions are made up but are intended to be representative of the stages a project (or developer) may pass through. This project is accompanied by an in-depth commentary at http://zxq9.com/erlmud/.
